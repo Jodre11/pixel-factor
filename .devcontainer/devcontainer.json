@@ -1,0 +1,5 @@
+{
+  "name": "pixel-factor",
+  "image": "mcr.microsoft.com/devcontainers/rust:1",
+  "postCreateCommand": "make setup"
+}
