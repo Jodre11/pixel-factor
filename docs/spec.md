@@ -240,7 +240,7 @@ Rejected for now: loading Rust into Keycloak's JVM (JNI or a Java WASM runtime).
 
 ## 17. Build order and status
 
-1. Rust core library, with test vectors. DONE: `pixel-factor-core` v0.1. 22 tests passing, including a known-answer vector. Unaudited.
+1. Rust core library, with test vectors. DONE: `pixel-factor-core` v0.1. Example, property and known-answer tests, fuzzing and mutation testing. Unaudited.
 2. Rust HTTP service. Next.
 3. Keycloak authenticator plugin: first working demo, Keycloak in Docker.
 4. OIDC host reusing the same service, for Entra ID external MFA and Okta's IdP authenticator, subject to how each classifies the factor type.
