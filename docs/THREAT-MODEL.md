@@ -39,6 +39,7 @@ Client (tap page)  --taps, in width units-->  Service (core)  --HMAC request--> 
 | No per-tap signal from the record | One verifier covers the whole sequence. Offsets after the first are encrypted with keys chained through the earlier indices, with no authentication tag, so a wrong key still yields a plausible offset. |
 | No per-tap signal from the endpoint | `verify` returns only match or no match. Anything wrong with the taps is a no match, never an error. The final comparison is constant time. |
 | Revisits are hidden | Each position gets its own key, so a repeated point does not repeat in the record. |
+| The tap count is hidden | Every record holds 31 offset slots, with random fill after the last tap. Verification tries the submitted count in full whatever the enrolled one, so neither the record nor timing shows it. Only the documented minimum is public. |
 | A record cannot be moved to another image or tolerance | The image id, r and aspect are bound into every key and the verifier. |
 | Pepper rotation | Each record names the pepper version it uses. |
 

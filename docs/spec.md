@@ -1,6 +1,8 @@
-# Pixel Based Factor Verification: Spec v0.6
+# Pixel Based Factor Verification: Spec v0.7
 
 Status: draft, 2026-11-27. Core library built (v0.1, unaudited).
+
+Changes in v0.7: the stored record no longer reveals the tap count. Offsets are padded to a fixed 31 slots with random fill (record format version 2).
 
 Changes in v0.6: section 18 reduced to public sources and prior art.
 
@@ -101,14 +103,14 @@ Steps:
 
 | Field | Notes |
 |---|---|
-| version | Format version, currently 1 |
+| version | Format version, currently 2 |
 | image_id | Which image |
 | r, aspect | Geometry |
 | kdf | Argon2id settings |
 | pepper_version | For rotation |
 | salt | 16 random bytes, per user |
 | first_offset | 4 bytes, cleartext |
-| enc_offsets | 4 bytes per tap after the first, encrypted |
+| enc_offsets | 124 bytes: 31 slots of 4. Encrypted offsets of taps 2 to n, then random fill |
 | verifier | 32 bytes |
 
 Verifier:
@@ -121,6 +123,7 @@ verifier  = HMAC-SHA256(pepper, "pfv1/final" || 0x00 || stretched)
 - index_list is a count byte followed by each index as two big-endian i32, in tap order.
 - context is the image id, r, and aspect. It binds the record to its parameters: changing any of them makes verification fail.
 - Nothing device specific is stored.
+- The tap count is not stored. Every record is the same size, and without the pepper the fill cannot be told apart from an encrypted offset. The documented minimum (section 9) is public; how many taps a particular user chose is not.
 
 ## 7. Chained offset encryption
 
@@ -145,17 +148,19 @@ Note: a wrongly decrypted offset still matches its own tap about half the time, 
 
 ## 8. Verification
 
+The verifier does not know n. It treats the number of taps submitted, m, as the count, for any m from 1 to 32.
+
 1. Tap 1: subtract first_offset, round to the nearest centre, giving index'_1.
-2. For k = 2 to n: derive the keystream from the indices so far, decrypt offset_k, subtract it from tap k, round, giving index'_k.
-3. Compute the verifier over index'_1 to index'_n and compare in constant time.
+2. For k = 2 to m: derive the keystream from the indices so far, decrypt offset_k, subtract it from tap k, round, giving index'_k.
+3. Compute the verifier over index'_1 to index'_m and compare in constant time. The index list starts with its count, so m other than n fails here like any other wrong sequence.
 
 Outcomes:
 
 - Match: every tap inside its hexagon, in order.
-- No match: anything else, including wrong tap count, taps outside the image, or non-finite coordinates. All or nothing, with no indication of which tap was wrong.
+- No match: anything else, including a wrong tap count, taps outside the image, or non-finite coordinates. All or nothing, with no indication of which tap was wrong.
 - Error: reserved for a malformed record or a pepper provider failure, such as an unknown pepper version. Never caused by the taps.
 
-The pepper is called n times per operation: n - 1 keystreams and one final HMAC.
+The pepper is called m times per verification (m - 1 keystreams and one final HMAC) and n times per enrolment. The cost of a verification depends on the count submitted, never on the count enrolled. Only an empty submission, one over 32 taps, or a tap outside the image returns early, and none of those depends on the record.
 
 ## 9. Entropy and parameters
 

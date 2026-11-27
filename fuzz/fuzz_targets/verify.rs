@@ -6,7 +6,7 @@
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 use pixel_factor_core::geometry::Point;
-use pixel_factor_core::{verify, KdfParams, Record, StaticPepper};
+use pixel_factor_core::{verify, KdfParams, Record, StaticPepper, ENC_OFFSETS_LEN};
 
 #[derive(Arbitrary, Debug)]
 struct Input {
@@ -17,7 +17,9 @@ struct Input {
     pepper_version: u32,
     salt: [u8; 16],
     first_offset: [u8; 4],
-    enc_offsets: Vec<u8>,
+    // Fixed length, so the fuzzer reaches the decryption path, not only the
+    // length check that rejects a malformed record.
+    enc_offsets: [u8; ENC_OFFSETS_LEN],
     verifier: [u8; 32],
     taps: Vec<(f64, f64)>,
 }
@@ -37,7 +39,7 @@ fuzz_target!(|input: Input| {
         pepper_version: input.pepper_version,
         salt: input.salt,
         first_offset: input.first_offset,
-        enc_offsets: input.enc_offsets,
+        enc_offsets: input.enc_offsets.to_vec(),
         verifier: input.verifier,
     };
     let taps: Vec<Point> = input

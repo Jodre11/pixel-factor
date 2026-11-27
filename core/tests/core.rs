@@ -1,6 +1,7 @@
 use pixel_factor_core::geometry::{hex_round, Lattice, Point};
 use pixel_factor_core::{
-    enrol, enrol_with_salt, verify, Error, KdfParams, Policy, Record, StaticPepper, Warning,
+    enrol, enrol_deterministic, verify, Error, KdfParams, Policy, Record, StaticPepper, Warning,
+    ENC_OFFSETS_LEN,
 };
 
 const ASPECT: f64 = 0.75;
@@ -99,7 +100,6 @@ fn offset_does_not_depend_on_which_cell() {
 fn exact_taps_verify() {
     let e = enrol(&five(), "img-1", &test_policy(), &pepper()).unwrap();
     assert!(e.warnings.is_empty());
-    assert_eq!(e.record.tap_count(), 5);
     assert!(verify(&five(), &e.record, &pepper()).unwrap());
 }
 
@@ -147,6 +147,78 @@ fn wrong_tap_count_fails_cleanly() {
     let mut six = five();
     six.push(Point::new(0.5, 0.5));
     assert!(!verify(&six, &e.record, &pepper()).unwrap());
+}
+
+#[test]
+fn records_do_not_reveal_the_tap_count() {
+    // A five-tap and a six-tap record have every field the same size, and the
+    // slots past the last tap differ between enrolments of the same taps.
+    let mut six = five();
+    six.push(Point::new(0.40, 0.10));
+    let a = enrol(&five(), "img-1", &test_policy(), &pepper())
+        .unwrap()
+        .record;
+    let b = enrol(&six, "img-1", &test_policy(), &pepper())
+        .unwrap()
+        .record;
+    let again = enrol(&five(), "img-1", &test_policy(), &pepper())
+        .unwrap()
+        .record;
+    assert_eq!(a.enc_offsets.len(), ENC_OFFSETS_LEN);
+    assert_eq!(b.enc_offsets.len(), ENC_OFFSETS_LEN);
+    assert_eq!(
+        serde_json::to_string(&a).unwrap().len(),
+        serde_json::to_string(&b).unwrap().len()
+    );
+    assert_ne!(a.enc_offsets[16..], again.enc_offsets[16..]);
+}
+
+#[test]
+fn every_count_is_tried_against_the_record() {
+    // Any count up to MAX_TAPS is a well-formed attempt: it fails at the
+    // verifier, not by a count check, so the record reveals nothing.
+    let e = enrol(&five(), "img-1", &test_policy(), &pepper()).unwrap();
+    let mut taps = five();
+    while taps.len() < 32 {
+        taps.push(Point::new(0.5, 0.5));
+    }
+    for n in 1..=32 {
+        assert_eq!(
+            verify(&taps[..n], &e.record, &pepper()),
+            Ok(n == 5),
+            "n = {n}"
+        );
+    }
+    assert!(!verify(&[], &e.record, &pepper()).unwrap());
+    let mut too_many = taps.clone();
+    too_many.push(Point::new(0.5, 0.5));
+    assert!(!verify(&too_many, &e.record, &pepper()).unwrap());
+}
+
+#[test]
+fn fill_does_not_affect_verification() {
+    let salt = *b"0123456789abcdef";
+    let a = enrol_deterministic(
+        &five(),
+        "i",
+        &test_policy(),
+        &pepper(),
+        salt,
+        [0; ENC_OFFSETS_LEN],
+    )
+    .unwrap();
+    let b = enrol_deterministic(
+        &five(),
+        "i",
+        &test_policy(),
+        &pepper(),
+        salt,
+        [0xff; ENC_OFFSETS_LEN],
+    )
+    .unwrap();
+    assert_eq!(a.record.enc_offsets[..16], b.record.enc_offsets[..16]);
+    assert_eq!(a.record.verifier, b.record.verifier);
+    assert!(verify(&five(), &b.record, &pepper()).unwrap());
 }
 
 #[test]
@@ -260,7 +332,6 @@ fn one_revisit_is_allowed_and_snapped() {
         Point::new(0.90, 0.70),
     ];
     let e = enrol(&taps, "i", &policy, &pepper()).unwrap();
-    assert_eq!(e.record.tap_count(), 6);
 
     // The revisit shares A's tolerance region exactly: tapping the original
     // A in both positions works.
@@ -374,9 +445,11 @@ fn known_answer_vector() {
     // Fixed inputs must always produce this exact record. If this test
     // fails, the format has changed and existing records will not verify.
     let salt = *b"0123456789abcdef";
-    let e = enrol_with_salt(&five(), "kat-image", &test_policy(), &pepper(), salt).unwrap();
+    let fill = [0x5a; ENC_OFFSETS_LEN];
+    let e =
+        enrol_deterministic(&five(), "kat-image", &test_policy(), &pepper(), salt, fill).unwrap();
     let json = serde_json::to_string(&e.record).unwrap();
-    assert_eq!(json, include_str!("vectors/kat1.json").trim());
+    assert_eq!(json, include_str!("vectors/kat2.json").trim());
 }
 
 // ---------- input limits ----------
@@ -431,7 +504,7 @@ fn malformed_records_are_errors_not_mismatches() {
         .record;
 
     let mut r = good.clone();
-    r.version = 2;
+    r.version = 1;
     assert!(matches!(
         verify(&five(), &r, &pepper()),
         Err(Error::InvalidRecord(_))
@@ -445,7 +518,7 @@ fn malformed_records_are_errors_not_mismatches() {
     ));
 
     let mut r = good.clone();
-    r.enc_offsets = vec![0; 4 * 32];
+    r.enc_offsets.push(0);
     assert!(matches!(
         verify(&five(), &r, &pepper()),
         Err(Error::InvalidRecord(_))
@@ -581,7 +654,6 @@ fn a_full_length_sequence_enrols_and_verifies() {
         .map(|i| Point::new(0.05 + 0.1 * f64::from(i % 8), 0.1 + 0.15 * f64::from(i / 8)))
         .collect();
     let e = enrol(&taps, "i", &policy, &pepper()).unwrap();
-    assert_eq!(e.record.tap_count(), 32);
     assert!(verify(&taps, &e.record, &pepper()).unwrap());
 }
 

@@ -65,7 +65,7 @@ mutants: ## Mutation testing: break the code on purpose and see if a test notice
 fuzz: ## Fuzz `verify` for FUZZ_SECONDS seconds (needs a nightly toolchain)
 	cargo +nightly fuzz run verify -- -max_total_time=$(FUZZ_SECONDS)
 
-kat: ## Print the known-answer record (compare with core/tests/vectors/kat1.json)
+kat: ## Print the known-answer record (compare with core/tests/vectors/kat2.json)
 	@cargo run --quiet --locked -p pixel-factor-core --example kat
 
 timing: ## Time one enrolment and verification at production settings
