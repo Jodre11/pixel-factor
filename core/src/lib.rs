@@ -450,16 +450,15 @@ pub fn verify(taps: &[Point], record: &Record, pepper: &dyn PepperProvider) -> R
     }
 
     let ctx = record.context();
-    let mut encrypted = record.enc_offsets.chunks_exact(4);
+    let mut encrypted = record.enc_offsets.as_chunks::<4>().0.iter();
     let mut indices: Vec<CellIndex> = Vec::with_capacity(taps.len());
     for tap in taps {
         let offset = if indices.is_empty() {
             Offset::from_bytes(record.first_offset)
         } else {
             let ks = offset_keystream(pepper, record.pepper_version, &record.salt, &ctx, &indices)?;
-            let enc: [u8; 4] = encrypted
+            let enc: [u8; 4] = *encrypted
                 .next()
-                .and_then(|chunk| chunk.try_into().ok())
                 .ok_or(Error::InvalidRecord("enc_offsets length"))?;
             // No integrity check on purpose: a wrong key must give a
             // plausible offset, never an error, or taps become checkable
