@@ -1,13 +1,10 @@
 version: 2
 updates:
+  # Covers fuzz/ too: its lock file is untracked and resolved from core's.
   - package-ecosystem: cargo
     directory: /
     schedule:
       interval: weekly
-  - package-ecosystem: cargo
-    directory: /fuzz
-    schedule:
-      interval: monthly
   - package-ecosystem: github-actions
     directory: /
     schedule:

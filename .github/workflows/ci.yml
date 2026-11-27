@@ -29,7 +29,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: check-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'fuzz/Cargo.lock', 'scripts/install-tools.sh') }}
+          key: check-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'scripts/install-tools.sh') }}
 
       # rustup reads rust-toolchain.toml and installs the pinned toolchain.
       - name: Set up
@@ -61,7 +61,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: coverage-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'fuzz/Cargo.lock', 'scripts/install-tools.sh') }}
+          key: coverage-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'scripts/install-tools.sh') }}
 
       - name: Set up
         run: |
