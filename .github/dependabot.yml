@@ -1,6 +1,6 @@
 version: 2
 updates:
-  # Covers fuzz/ too: its lock file is untracked and resolved from core's.
+  # Covers fuzz/ too: it shares the workspace's Cargo.lock.
   - package-ecosystem: cargo
     directory: /
     schedule:

@@ -1,3 +1,7 @@
 [workspace]
-members = ["core"]
+# fuzz/ shares this workspace's Cargo.lock, so its dependencies stay locked and
+# pass `cargo deny`. It is not a default member: plain `cargo build` and
+# `cargo test` skip it, and the Makefile excludes it where it passes --workspace.
+members = ["core", "fuzz"]
+default-members = ["core"]
 resolver = "2"

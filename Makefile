@@ -16,7 +16,6 @@ help: ## List the available commands
 setup: ## Prepare a fresh checkout: git hooks, dependencies, analysis tools
 	@if git rev-parse --git-dir >/dev/null 2>&1; then git config core.hooksPath .githooks; fi
 	cargo fetch --locked
-	cargo fetch --manifest-path fuzz/Cargo.toml
 	@scripts/install-tools.sh
 
 tools-deep: ## Install the tools for coverage, mutation testing and fuzzing
@@ -37,10 +36,10 @@ lint: ## Clippy with warnings as errors
 	cargo clippy --workspace --all-targets --locked --offline -- -D warnings
 
 test: ## Run every test, including property tests, with no network access
-	cargo test --workspace --locked --offline
+	cargo test --workspace --exclude pixel-factor-fuzz --locked --offline
 
 doc: ## Build the API docs with warnings as errors
-	RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked --offline
+	RUSTDOCFLAGS="-D warnings" cargo doc --workspace --exclude pixel-factor-fuzz --no-deps --locked --offline
 
 docs-check: ## Fail if the docs name a command or file that does not exist
 	@scripts/check-docs.sh
@@ -52,13 +51,13 @@ shellcheck: ## Lint the shell scripts
 	shellcheck scripts/*.sh .githooks/pre-commit
 
 fuzz-check: ## Compile the fuzz target, so it cannot rot
-	cargo check --manifest-path fuzz/Cargo.toml --offline
+	cargo check -p pixel-factor-fuzz --locked --offline
 
 advisories: ## Check dependencies against the RustSec advisory database (needs network)
 	cargo deny check advisories
 
 coverage: ## Line coverage, failing below COVERAGE_MIN percent
-	cargo llvm-cov --workspace --locked --offline --fail-under-lines $(COVERAGE_MIN)
+	cargo llvm-cov --workspace --exclude pixel-factor-fuzz --locked --offline --fail-under-lines $(COVERAGE_MIN)
 
 mutants: ## Mutation testing: break the code on purpose and see if a test notices (slow)
 	cargo mutants --package pixel-factor-core --no-shuffle --jobs $(MUTANTS_JOBS) -- --locked --offline
