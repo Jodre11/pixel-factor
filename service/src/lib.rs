@@ -24,13 +24,14 @@ use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{middleware, Json, Router};
+use hmac::{Hmac, KeyInit, Mac};
 use pixel_factor_core::geometry::Point;
 use pixel_factor_core::{
     enrol, verify, Error as CoreError, KdfParams, PepperProvider, Policy, Record, StaticPepper,
     Warning,
 };
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -88,7 +89,8 @@ pub struct App {
     pepper: Box<dyn PepperProvider + Send + Sync>,
     images: BTreeMap<String, f64>,
     decoys: BTreeMap<String, Record>,
-    api_token_digest: [u8; 32],
+    token_key: [u8; 32],
+    token_mac: [u8; 32],
     lockout: Lockout,
     kdf: KdfParams,
     work: Semaphore,
@@ -99,6 +101,9 @@ impl App {
     /// decoys: `KdfParams::default()` in production, cheaper in tests.
     pub fn new(config: &config::Config, store: Store, kdf: KdfParams) -> Result<Self, String> {
         let pepper = StaticPepper::new(1, config.dev_pepper.clone());
+        let mut token_key = [0u8; 32];
+        getrandom::fill(&mut token_key).map_err(|e| format!("random key: {e}"))?;
+        let token_mac = token_mac(&token_key, &config.api_token).ok_or("token key rejected")?;
         let mut decoys = BTreeMap::new();
         for (id, aspect) in &config.images {
             let record = enrol(&decoy_taps(*aspect), id, &policy(*aspect, kdf), &pepper)
@@ -111,7 +116,8 @@ impl App {
             pepper: Box::new(pepper),
             images: config.images.clone(),
             decoys,
-            api_token_digest: Sha256::digest(config.api_token.as_bytes()).into(),
+            token_key,
+            token_mac,
             lockout: config.lockout,
             kdf,
             work: Semaphore::new(config.max_concurrent),
@@ -153,6 +159,12 @@ fn decoy_taps(aspect: f64) -> Vec<Point> {
         .collect()
 }
 
+fn token_mac(key: &[u8; 32], token: &str) -> Option<[u8; 32]> {
+    let mut mac = Hmac::<Sha256>::new_from_slice(key).ok()?;
+    mac.update(token.as_bytes());
+    Some(mac.finalize().into_bytes().into())
+}
+
 fn unix_now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -186,10 +198,10 @@ async fn require_token(
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
         .unwrap_or("");
-    // Digests are compared, so the comparison takes the same time whatever the
-    // length of the token presented.
-    let presented = Sha256::digest(presented.as_bytes());
-    if bool::from(presented.ct_eq(&app.api_token_digest)) {
+    // MACs under a per-process random key are compared, so the comparison
+    // takes the same time whatever the length of the token presented.
+    let presented = token_mac(&app.token_key, presented).unwrap_or([0; 32]);
+    if bool::from(presented.ct_eq(&app.token_mac)) {
         next.run(request).await
     } else {
         ApiError::Unauthorised.into_response()
