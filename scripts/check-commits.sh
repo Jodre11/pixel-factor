@@ -11,7 +11,9 @@ set -eu
 base=${1:?usage: check-commits.sh <base-ref>}
 status=0
 
-for sha in $(git rev-list "$base"..HEAD); do
+# Merge commits are skipped: on a pull request CI checks out a synthetic
+# merge of the branch into its base, whose subject is not the author's.
+for sha in $(git rev-list --no-merges "$base"..HEAD); do
     subject=$(git log -1 --format=%s "$sha")
     short=$(git rev-parse --short "$sha")
 
