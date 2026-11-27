@@ -365,7 +365,7 @@ fn config_reads_the_environment() {
 
 #[test]
 fn config_rejects_bad_values() {
-    let bad: [(&str, Option<&str>); 15] = [
+    let bad: [(&str, Option<&str>); 16] = [
         ("PF_DB_PATH", None),
         ("PF_API_TOKEN", Some("")),
         ("PF_IMAGES", None),
@@ -379,6 +379,7 @@ fn config_rejects_bad_values() {
         ("PF_DEV_PEPPER_HEX", Some("zz")),
         ("PF_DEV_PEPPER_HEX", Some("1111")),
         ("PF_MAX_FAILURES", Some("0")),
+        ("PF_MAX_FAILURES", Some("4294967296")),
         ("PF_LISTEN", Some("nowhere")),
         ("PF_FAILURE_WINDOW_SECS", Some("3599")),
     ];
@@ -551,6 +552,36 @@ async fn too_few_distinct_points_are_rejected() {
         body["error"].as_str().unwrap().contains("distinct"),
         "{body}"
     );
+}
+
+#[test]
+fn store_errors_are_reported_not_swallowed() {
+    let dir = std::env::temp_dir().join(format!("pf-store-errors-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+
+    // A directory is not a database.
+    let Err(err) = Store::open(&dir) else {
+        panic!("opening a directory as a database succeeded");
+    };
+    assert!(err.to_string().contains("database"), "{err}");
+
+    let path = dir.join("test.db");
+    let store = Store::open(&path).unwrap();
+    // Corrupt the database behind the open store's back.
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute(
+        "INSERT INTO users (user_id, record) VALUES ('bob', 'not json')",
+        [],
+    )
+    .unwrap();
+    conn.execute("DROP TABLE failures", []).unwrap();
+    drop(conn);
+
+    assert!(store.get("bob").is_err(), "a corrupt record is an error");
+    assert!(store.failures("bob", 100, 50).is_err());
+    assert!(store.add_failure("bob", 100, 50).is_err());
+    drop(store);
+    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[tokio::test]
