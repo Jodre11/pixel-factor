@@ -46,10 +46,15 @@ use subtle::ConstantTimeEq;
 type HmacSha256 = Hmac<Sha256>;
 
 /// Format version written into every record.
-pub const RECORD_VERSION: u8 = 1;
+pub const RECORD_VERSION: u8 = 2;
 
 /// Most taps a sequence may have. The index count is stored in one byte.
 pub const MAX_TAPS: usize = 32;
+
+/// Length of [`Record::enc_offsets`] in every record: one 4-byte slot for each
+/// tap after the first, up to [`MAX_TAPS`]. Slots past the end of the sequence
+/// hold random fill, so the record does not reveal how many taps it has.
+pub const ENC_OFFSETS_LEN: usize = (MAX_TAPS - 1) * 4;
 
 /// Longest image id accepted, in bytes.
 pub const MAX_IMAGE_ID_LEN: usize = 255;
@@ -236,7 +241,9 @@ pub struct Record {
     /// Offset of the first tap, in the clear.
     #[serde(with = "hex")]
     pub first_offset: [u8; 4],
-    /// Encrypted offsets of taps 2..n, four bytes each.
+    /// Encrypted offsets of taps 2..n, four bytes each, then random fill to
+    /// [`ENC_OFFSETS_LEN`] bytes. Without the pepper the fill cannot be told
+    /// apart from an encrypted offset, so the tap count stays secret.
     #[serde(with = "hex")]
     pub enc_offsets: Vec<u8>,
     /// The one hash covering the whole ordered sequence.
@@ -245,11 +252,6 @@ pub struct Record {
 }
 
 impl Record {
-    /// Number of taps in the enrolled sequence.
-    pub fn tap_count(&self) -> usize {
-        (self.enc_offsets.len() / 4).saturating_add(1)
-    }
-
     /// Bytes that bind the keys and verifier to this record's parameters, so
     /// a record cannot be reused under a different image or tolerance.
     fn context(&self) -> Vec<u8> {
@@ -287,17 +289,22 @@ pub fn enrol(
 ) -> Result<Enrolment, Error> {
     let mut salt = [0u8; 16];
     getrandom::fill(&mut salt).map_err(|e| Error::Kdf(e.to_string()))?;
-    enrol_with_salt(taps, image_id, policy, pepper, salt)
+    let mut fill = [0u8; ENC_OFFSETS_LEN];
+    getrandom::fill(&mut fill).map_err(|e| Error::Kdf(e.to_string()))?;
+    enrol_deterministic(taps, image_id, policy, pepper, salt, fill)
 }
 
-/// Enrol with a caller-supplied salt. Exists so that test vectors are
-/// reproducible. Production code should call [`enrol`].
-pub fn enrol_with_salt(
+/// Enrol with caller-supplied randomness: the salt, and the fill for the
+/// unused offset slots. Exists so that test vectors are reproducible.
+/// Production code should call [`enrol`]: fill that is not random reveals the
+/// tap count.
+pub fn enrol_deterministic(
     taps: &[Point],
     image_id: &str,
     policy: &Policy,
     pepper: &dyn PepperProvider,
     salt: [u8; 16],
+    fill: [u8; ENC_OFFSETS_LEN],
 ) -> Result<Enrolment, Error> {
     policy.validate()?;
     if !valid_image_id(image_id) {
@@ -378,7 +385,7 @@ pub fn enrol_with_salt(
     let ctx = context(image_id, policy.r, policy.aspect);
     let mut indices: Vec<CellIndex> = Vec::with_capacity(points.len());
     let mut first_offset = [0u8; 4];
-    let mut enc_offsets = Vec::with_capacity(points.len().saturating_mul(4));
+    let mut enc_offsets = Vec::with_capacity(ENC_OFFSETS_LEN);
     for p in &points {
         let (index, offset) = lattice.split(*p);
         if indices.is_empty() {
@@ -389,6 +396,8 @@ pub fn enrol_with_salt(
         }
         indices.push(index);
     }
+    // Slots past the last tap take the fill, so every record is the same size.
+    enc_offsets.extend(fill.iter().skip(enc_offsets.len()));
 
     let verifier = compute_verifier(pepper, pepper_version, &salt, &ctx, &policy.kdf, &indices)?;
 
@@ -414,22 +423,26 @@ pub fn enrol_with_salt(
 /// Returns `Ok(true)` only if every tap matches, in order. The result is all
 /// or nothing: there is no indication of which tap was wrong. `Err` means the
 /// record or the pepper provider is at fault, not the taps.
+///
+/// The record does not say how many taps it holds, so any count from 1 to
+/// [`MAX_TAPS`] is tried in full, at the same cost whatever the enrolled
+/// count. A wrong count fails at the verifier like any other wrong sequence.
 pub fn verify(taps: &[Point], record: &Record, pepper: &dyn PepperProvider) -> Result<bool, Error> {
     if record.version != RECORD_VERSION {
         return Err(Error::InvalidRecord("unsupported version"));
     }
-    if !record.enc_offsets.len().is_multiple_of(4) {
+    if record.enc_offsets.len() != ENC_OFFSETS_LEN {
         return Err(Error::InvalidRecord("enc_offsets length"));
-    }
-    if record.tap_count() > MAX_TAPS {
-        return Err(Error::InvalidRecord("too many taps"));
     }
     if !valid_aspect(record.aspect) || !valid_image_id(&record.image_id) {
         return Err(Error::InvalidRecord("geometry or image id"));
     }
     let lattice = Lattice::new(record.r).ok_or(Error::InvalidRecord("r out of range"))?;
 
-    if taps.len() != record.tap_count() || taps.iter().any(|p| !in_bounds(p, record.aspect)) {
+    // These depend only on the taps and on public fields, never on the
+    // enrolled count, so returning early reveals nothing about it.
+    if taps.is_empty() || taps.len() > MAX_TAPS || taps.iter().any(|p| !in_bounds(p, record.aspect))
+    {
         return Ok(false);
     }
 

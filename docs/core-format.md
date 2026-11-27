@@ -64,7 +64,7 @@ The context binds a record to its image id, r, and aspect. Changing any of them 
 
 ## Record (JSON via serde)
 
-`version`, `image_id`, `r`, `aspect`, `kdf {m_kib, t, p}`, `pepper_version`, `salt`, `first_offset`, `enc_offsets` (4 bytes per tap after the first), `verifier`. Byte fields are hex strings.
+`version`, `image_id`, `r`, `aspect`, `kdf {m_kib, t, p}`, `pepper_version`, `salt`, `first_offset`, `enc_offsets` (always 124 bytes: 31 four-byte slots, the encrypted offsets of taps 2 to n followed by random fill), `verifier`. Byte fields are hex strings. `version` is 2; version 1 records, which stored one slot per tap and so revealed the tap count, are rejected as malformed.
 
 ## Enrolment rules as implemented
 
@@ -77,7 +77,8 @@ The context binds a record to its image id, r, and aspect. Changing any of them 
 
 ## Verification behaviour
 
-- Wrong tap count, out-of-bounds, or non-finite taps: `Ok(false)`.
+- The record does not hold the tap count. Any submitted count from 1 to 32 is decrypted and hashed in full, and a wrong count fails at the verifier.
+- No taps, more than 32, or out-of-bounds or non-finite taps: `Ok(false)`, before any key derivation. These checks depend only on the submission and public record fields.
 - Offsets have no integrity check. Tampered or wrongly decrypted offsets give `Ok(false)` or, by chance, a match on that tap only. Never an error.
 - `Err` is reserved for a malformed record or a pepper provider failure (including an unknown pepper version).
 - Final comparison is constant time.
@@ -88,11 +89,11 @@ A wrongly decrypted offset still matches its tap roughly half the time, because 
 
 ## Measured
 
-Release build, default Argon2id (64 MiB, 3 iterations): about 120 ms per enrolment or verification on the build machine. The pepper is called n times per operation (n - 1 keystreams plus the final HMAC).
+Release build, default Argon2id (64 MiB, 3 iterations): about 120 ms per enrolment or verification on the build machine. The pepper is called m times per verification, where m is the number of taps submitted (m - 1 keystreams plus the final HMAC), and n times per enrolment.
 
 ## Tests
 
-- Example-based tests in `core/tests/core.rs`: geometry, ordering, tap count, bounds, pepper mismatch and version, record binding, revisit snapping and concealment, enrolment rules, input limits, exact boundaries, JSON round trip, and a known-answer vector (`tests/vectors/kat1.json`).
+- Example-based tests in `core/tests/core.rs`: geometry, ordering, tap count, bounds, pepper mismatch and version, record binding, revisit snapping and concealment, enrolment rules, input limits, exact boundaries, JSON round trip, and a known-answer vector (`tests/vectors/kat2.json`).
 - Property tests in `core/tests/properties.rs`: taps inside the inradius always match and taps beyond the circumradius never do, across every supported tolerance; valid sequences verify, one bad tap or any reordering fails; `verify` never errors on arbitrary taps or offsets and never panics on arbitrary records.
 - A fuzz target for `verify` in `fuzz/`.
 - Mutation testing (`make mutants`): every viable mutant of the core is caught.

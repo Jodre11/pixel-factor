@@ -60,7 +60,7 @@ If a gate blocks a change you believe is right, fix the code or raise it. Do not
 | `core/tests/properties.rs` | Property tests. |
 | `fuzz/` | Fuzz target for `verify`. A workspace member that shares `Cargo.lock`, excluded from the default build and tests. |
 | `deny.toml` | Dependency policy. |
-| `core/tests/vectors/kat1.json` | Known-answer vector. Locks the record format. |
+| `core/tests/vectors/kat2.json` | Known-answer vector. Locks the record format. |
 | `docs/spec.md` | Design decisions and reasoning. |
 | `docs/core-format.md` | Byte-level formats. |
 | `docs/PRODUCT.md` | Audience, problem, principles, non-goals. |
@@ -97,8 +97,9 @@ Coordinates are in units of image width, never pixels: x runs 0 to 1, y runs 0 t
 
 - **Never add an integrity check to stored offsets.** A wrongly decrypted offset must look plausible. Any error or validation there lets an attacker test taps one at a time.
 - **Never hash or check points individually.** One verifier covers the whole sequence. No per-tap feedback, anywhere.
+- **Never reveal the tap count.** Not in the record (offsets are padded to a fixed length with random fill), not in a response, not in a log, not in timing. Only the documented minimum is public.
 - **`verify` returns `Ok(false)` for anything wrong with the taps.** `Err` is only for a malformed record or a pepper failure. Keep it that way.
-- **The KAT locks the format.** If `known_answer_vector` fails, you changed the record format. Do not regenerate `kat1.json` to make it pass unless the format change is intended, in which case bump `RECORD_VERSION` too.
+- **The KAT locks the format.** If `known_answer_vector` fails, you changed the record format. Do not regenerate `kat2.json` to make it pass unless the format change is intended, in which case bump `RECORD_VERSION` too.
 - **Domain strings and byte encodings are part of the format.** `pfv1/offset`, `pfv1/kdf`, `pfv1/final`, big-endian integers. See `docs/core-format.md`.
 - **Geometry stays in `core/src/geometry.rs`.** A second implementation would round differently at cell edges.
 - **Tests use cheap Argon2id settings.** Production defaults are in `Policy::standard`. Do not copy the test settings.

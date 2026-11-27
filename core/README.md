@@ -52,7 +52,7 @@ cargo test
 cargo run --release --example timing
 ```
 
-`tests/vectors/kat1.json` is a known-answer vector. If it changes, the record format has changed.
+`tests/vectors/kat2.json` is a known-answer vector. If it changes, the record format has changed.
 
 ## Licence
 

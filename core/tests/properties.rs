@@ -2,7 +2,9 @@
 //! generated inputs instead of hand-picked ones.
 
 use pixel_factor_core::geometry::{Lattice, Offset, Point, MAX_R, MIN_R};
-use pixel_factor_core::{enrol_with_salt, verify, KdfParams, Policy, Record, StaticPepper};
+use pixel_factor_core::{
+    enrol_deterministic, verify, KdfParams, Policy, Record, StaticPepper, ENC_OFFSETS_LEN,
+};
 use proptest::prelude::*;
 
 const ASPECT: f64 = 0.75;
@@ -143,7 +145,7 @@ proptest! {
         nudges in proptest::collection::vec((0.0..0.99f64, 0.0..std::f64::consts::TAU), 5),
     ) {
         let policy = cheap_policy(0.022);
-        let record = enrol_with_salt(&taps, "prop", &policy, &pepper(), salt).unwrap().record;
+        let record = enrol_deterministic(&taps, "prop", &policy, &pepper(), salt, [0; ENC_OFFSETS_LEN]).unwrap().record;
         let near: Vec<Point> = taps
             .iter()
             .zip(&nudges)
@@ -162,7 +164,7 @@ proptest! {
         angle in 0.0..std::f64::consts::TAU,
     ) {
         let policy = cheap_policy(0.022);
-        let record = enrol_with_salt(&taps, "prop", &policy, &pepper(), salt).unwrap().record;
+        let record = enrol_deterministic(&taps, "prop", &policy, &pepper(), salt, [0; ENC_OFFSETS_LEN]).unwrap().record;
         let s = Lattice::new(policy.r).unwrap().circumradius();
         let mut wrong = taps.clone();
         wrong[which] = nudge(wrong[which], factor * s, angle);
@@ -178,7 +180,7 @@ proptest! {
         b in 0usize..5,
     ) {
         prop_assume!(a != b);
-        let record = enrol_with_salt(&taps, "prop", &cheap_policy(0.022), &pepper(), salt)
+        let record = enrol_deterministic(&taps, "prop", &cheap_policy(0.022), &pepper(), salt, [0; ENC_OFFSETS_LEN])
             .unwrap()
             .record;
         let mut swapped = taps.clone();
@@ -194,7 +196,7 @@ proptest! {
         salt in any::<[u8; 16]>(),
         attempt in proptest::collection::vec((any_f64(), any_f64()), 0..8),
     ) {
-        let record = enrol_with_salt(&taps, "prop", &cheap_policy(0.022), &pepper(), salt)
+        let record = enrol_deterministic(&taps, "prop", &cheap_policy(0.022), &pepper(), salt, [0; ENC_OFFSETS_LEN])
             .unwrap()
             .record;
         let attempt: Vec<Point> = attempt.into_iter().map(|(x, y)| Point::new(x, y)).collect();
@@ -207,13 +209,14 @@ proptest! {
         taps in sequence(),
         salt in any::<[u8; 16]>(),
         first in any::<[u8; 4]>(),
-        rest in any::<[u8; 16]>(),
+        rest in proptest::collection::vec(any::<u8>(), ENC_OFFSETS_LEN),
     ) {
-        let mut record = enrol_with_salt(&taps, "prop", &cheap_policy(0.022), &pepper(), salt)
+        let fill = [0; ENC_OFFSETS_LEN];
+        let mut record = enrol_deterministic(&taps, "prop", &cheap_policy(0.022), &pepper(), salt, fill)
             .unwrap()
             .record;
         record.first_offset = first;
-        record.enc_offsets = rest.to_vec();
+        record.enc_offsets = rest;
         prop_assert!(verify(&taps, &record, &pepper()).is_ok());
     }
 
