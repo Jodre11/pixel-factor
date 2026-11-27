@@ -6,7 +6,7 @@
           {
             "type": "command",
             "command": "make -C \"$CLAUDE_PROJECT_DIR\" setup",
-            "timeout": 120
+            "timeout": 900
           }
         ]
       }

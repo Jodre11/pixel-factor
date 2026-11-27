@@ -1,0 +1,30 @@
+# cargo-deny configuration. Run with `make deny`.
+
+[graph]
+all-features = true
+
+[advisories]
+# Fail on any known vulnerability or unmaintained crate in the tree.
+version = 2
+yanked = "deny"
+
+[licenses]
+version = 2
+# Permissive licences only. Add to this list deliberately.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "Unicode-3.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
