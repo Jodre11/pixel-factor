@@ -3,6 +3,7 @@ name = "pixel-factor-fuzz"
 version = "0.0.0"
 edition = "2021"
 publish = false
+license = "MIT OR Apache-2.0"
 
 [package.metadata]
 cargo-fuzz = true
@@ -19,5 +20,3 @@ test = false
 doc = false
 bench = false
 
-# Not a member of the root workspace: it needs a nightly toolchain to run.
-[workspace]

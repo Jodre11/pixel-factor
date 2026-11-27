@@ -58,7 +58,7 @@ If a gate blocks a change you believe is right, fix the code or raise it. Do not
 | `core/src/lib.rs` | `enrol`, `verify`, `Record`, `Policy`, `PepperProvider`. |
 | `core/tests/core.rs` | Example-based tests. |
 | `core/tests/properties.rs` | Property tests. |
-| `fuzz/` | Fuzz target for `verify`. A separate crate, outside the workspace. |
+| `fuzz/` | Fuzz target for `verify`. A workspace member that shares `Cargo.lock`, excluded from the default build and tests. |
 | `deny.toml` | Dependency policy. |
 | `core/tests/vectors/kat1.json` | Known-answer vector. Locks the record format. |
 | `docs/spec.md` | Design decisions and reasoning. |

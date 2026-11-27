@@ -2,5 +2,3 @@ target/
 corpus/
 artifacts/
 coverage/
-# Resolved afresh from core's dependencies on each setup, so it cannot go stale.
-Cargo.lock

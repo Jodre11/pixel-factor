@@ -19,6 +19,13 @@ allow = [
 ]
 confidence-threshold = 0.9
 
+# libfuzzer-sys bundles LLVM's libFuzzer, which is under NCSA, a permissive
+# BSD-style licence. Allowed for that crate only: it builds the fuzz target and
+# is never part of the library.
+[[licenses.exceptions]]
+crate = "libfuzzer-sys"
+allow = ["NCSA"]
+
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
