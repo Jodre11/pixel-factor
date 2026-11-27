@@ -1,0 +1,10 @@
+target/
+fuzz/target/
+fuzz/corpus/
+fuzz/artifacts/
+.git/
+.github/
+.audit/
+*.db
+*.db-wal
+*.db-shm

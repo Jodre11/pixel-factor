@@ -15,9 +15,11 @@ PF_DB_PATH ?= target/serve.db
 PF_API_TOKEN ?= dev-token
 PF_IMAGES ?= demo=0.75
 PF_DEV_PEPPER_HEX ?= 6465762d6f6e6c792d7065707065722d6e6f742d666f722d70726f64756374696f6e
+# Tag for `make image`.
+IMAGE ?= pixel-factor-service:dev
 
 .PHONY: help setup tools-deep check check-changed fmt fmt-check lint test doc \
-	docs-check deny shellcheck fuzz-check advisories coverage mutants fuzz kat timing serve smoke
+	docs-check deny shellcheck fuzz-check advisories coverage mutants fuzz kat timing serve smoke image iac-scan image-scan
 
 help: ## List the available commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | sort
@@ -86,6 +88,15 @@ serve: ## Run the HTTP service locally with development settings; prints its add
 
 smoke: ## Start the service, drive enrol and verify through HTTP, then stop it
 	@scripts/smoke.sh
+
+image: ## Build the service container image as IMAGE
+	docker build --build-arg PF_BUILD_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null) -t $(IMAGE) .
+
+iac-scan: ## Trivy misconfiguration scan of the Dockerfile and workflows
+	trivy config --exit-code 1 --severity HIGH,CRITICAL .
+
+image-scan: ## Trivy vulnerability scan of IMAGE (run `make image` first)
+	trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed $(IMAGE)
 
 timing: ## Time one enrolment and verification at production settings
 	@cargo run --quiet --locked --release -p pixel-factor-core --example timing
