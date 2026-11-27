@@ -15,11 +15,12 @@ PF_DB_PATH ?= target/serve.db
 PF_API_TOKEN ?= dev-token
 PF_IMAGES ?= demo=0.75
 PF_DEV_PEPPER_HEX ?= 6465762d6f6e6c792d7065707065722d6e6f742d666f722d70726f64756374696f6e
-# Tag for `make image`.
-IMAGE ?= pixel-factor-service:dev
+# Tag for `make image`, named after this checkout's directory so sessions in different worktrees do not
+# overwrite each other's image. Characters a tag cannot hold become '-'.
+IMAGE ?= pixel-factor-service:$(shell basename "$(CURDIR)" | tr -c 'A-Za-z0-9_.\n-' '-' | cut -c1-128)
 
 .PHONY: help setup tools-deep check check-changed fmt fmt-check lint test doc \
-	docs-check deny shellcheck fuzz-check advisories coverage mutants fuzz kat timing serve smoke image iac-scan image-scan
+	docs-check deny shellcheck fuzz-check advisories coverage mutants fuzz kat timing serve smoke image container-smoke iac-scan image-scan
 
 help: ## List the available commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | sort
@@ -94,6 +95,9 @@ smoke: ## Start the service, drive enrol and verify through HTTP, then stop it
 
 image: ## Build the service container image as IMAGE
 	docker build --build-arg PF_BUILD_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null) -t $(IMAGE) .
+
+container-smoke: ## Run IMAGE with development settings and drive it over HTTP (run `make image` first)
+	scripts/container-smoke.sh $(IMAGE)
 
 iac-scan: ## Trivy misconfiguration scan of the Dockerfile and workflows
 	trivy config --exit-code 1 --severity HIGH,CRITICAL .

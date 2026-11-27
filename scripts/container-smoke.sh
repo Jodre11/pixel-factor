@@ -2,10 +2,10 @@
 # Run the service image with development settings, wait until its health check
 # passes, drive it with scripts/smoke.sh, then remove it.
 #
-#   scripts/container-smoke.sh [image]    default pixel-factor-service:dev
+#   scripts/container-smoke.sh <image>    `make container-smoke` passes the image `make image` built
 set -euo pipefail
 
-image="${1:-pixel-factor-service:dev}"
+image="${1:?usage: scripts/container-smoke.sh <image>}"
 token="dev-token"
 name="pf-smoke-$$"
 

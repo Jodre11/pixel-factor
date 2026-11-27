@@ -78,6 +78,8 @@ jobs:
   container:
     name: container
     runs-on: ubuntu-latest
+    env:
+      IMAGE: pixel-factor-service:ci
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -95,11 +97,11 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
-          image-ref: pixel-factor-service:dev
+          image-ref: ${{ env.IMAGE }}
           exit-code: "1"
           severity: HIGH,CRITICAL
           ignore-unfixed: true
 
       # Runs the image as it would be deployed and drives it over HTTP.
       - name: Smoke test the image
-        run: scripts/container-smoke.sh pixel-factor-service:dev
+        run: make container-smoke

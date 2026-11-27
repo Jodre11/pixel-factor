@@ -1,0 +1,14 @@
+# Normalise text to LF in the repository and in every checkout, whatever the platform.
+* text=auto eol=lf
+
+# Shell scripts and the git hook must stay LF to run.
+*.sh text eol=lf
+.githooks/* text eol=lf
+
+*.svg text
+*.png binary
+*.jpg binary
+
+# Generated: keep diffs readable and let GitHub collapse them.
+Cargo.lock linguist-generated=true
+docs/images/*.svg linguist-generated=true
