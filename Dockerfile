@@ -2,7 +2,7 @@
 #
 # Both base images are pinned by digest; Dependabot proposes updates.
 
-FROM rust:1.97.0-slim-trixie@sha256:686a437ead83701e8f871e66e838c3ec55f46b5fc235b025756396ac823bdc51 AS build
+FROM rust:1.100.0-slim-trixie@sha256:3b199fd6db7d709274df56565b8f4003f9e30d7bfcff9d53148c86053b7855e2 AS build
 WORKDIR /src
 COPY . .
 # Read at compile time and reported by GET /version.
