@@ -8,6 +8,7 @@ A change to the stored record format is always called out here, with the new `RE
 
 ### Changed
 
+- **Longer sequences, free revisits.** `Policy::max_revisits` is replaced by `max_taps`. The standard policy allows 5 to 8 taps with at least 5 distinct points, and any number of revisits that are not adjacent. The record format is unchanged.
 - **Record format version 2.** `enc_offsets` is always 124 bytes, padded with random fill, so a stored record no longer reveals how many taps it has. Verification tries any submitted count from 1 to 32 at the same cost. Version 1 records are rejected. `enrol_with_salt` is now `enrol_deterministic`, which also takes the fill. `Record::tap_count` is removed.
 
 ### Added

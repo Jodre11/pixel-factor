@@ -68,7 +68,7 @@ The context binds a record to its image id, r, and aspect. Changing any of them 
 
 ## Enrolment rules as implemented
 
-- Tap count between `min_distinct` and `min_distinct + max_revisits` (default 5 to 6).
+- Tap count between `min_distinct` and `max_taps` (default 5 to 8).
 - Every tap inside the image.
 - Consecutive taps at least 2s apart, else `ConsecutiveTooClose`.
 - A tap inside the hexagon of an earlier distinct point is snapped to that point (a revisit).

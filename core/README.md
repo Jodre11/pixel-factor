@@ -41,8 +41,8 @@ let ok = verify(&taps, &enrolment.record, &pepper)?;
 | Setting | Value |
 |---|---|
 | Tolerance r | 2.2% of image width |
-| Distinct points | 5 |
-| Revisits allowed | 1 (so 5 or 6 taps) |
+| Distinct points | at least 5 |
+| Taps | 5 to 8. Revisits are unlimited within that, but never straight after the point they repeat. |
 | Argon2id | 64 MiB, 3 iterations, parallelism 1 |
 
 ## Test

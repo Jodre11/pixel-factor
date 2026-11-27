@@ -184,20 +184,21 @@ pub struct Policy {
     pub aspect: f64,
     /// Minimum number of distinct points.
     pub min_distinct: usize,
-    /// How many taps may revisit an earlier point.
-    pub max_revisits: usize,
+    /// Most taps in a sequence, revisits included. At most [`MAX_TAPS`].
+    pub max_taps: usize,
     /// Argon2id cost for the verifier.
     pub kdf: KdfParams,
 }
 
 impl Policy {
-    /// r = 2.2% of width, 5 distinct points, 1 revisit, default Argon2id.
+    /// r = 2.2% of width, 5 to 8 taps with at least 5 distinct points, default
+    /// Argon2id. Revisits are unlimited within the tap count.
     pub fn standard(aspect: f64) -> Self {
         Self {
             r: 0.022,
             aspect,
             min_distinct: 5,
-            max_revisits: 1,
+            max_taps: 8,
             kdf: KdfParams::default(),
         }
     }
@@ -212,7 +213,12 @@ impl Policy {
         if self.min_distinct < 2 {
             return Err(Error::InvalidPolicy("min_distinct must be at least 2"));
         }
-        if self.min_distinct.saturating_add(self.max_revisits) > MAX_TAPS {
+        if self.max_taps < self.min_distinct {
+            return Err(Error::InvalidPolicy(
+                "max_taps must be at least min_distinct",
+            ));
+        }
+        if self.max_taps > MAX_TAPS {
             return Err(Error::InvalidPolicy("at most 32 taps"));
         }
         Ok(())
@@ -312,10 +318,7 @@ pub fn enrol_deterministic(
     }
     let lattice = Lattice::new(policy.r).ok_or(Error::InvalidPolicy("r out of range"))?;
 
-    let (min, max) = (
-        policy.min_distinct,
-        policy.min_distinct.saturating_add(policy.max_revisits),
-    );
+    let (min, max) = (policy.min_distinct, policy.max_taps);
     if taps.len() < min || taps.len() > max {
         return Err(Error::TapCount {
             min,
