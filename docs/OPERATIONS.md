@@ -19,7 +19,7 @@ To run the image locally with development settings and drive it end to end:
 
 ```
 make image
-scripts/container-smoke.sh
+make container-smoke
 ```
 
 CI builds the image, scans it and the `Dockerfile` with Trivy, and runs that smoke test on every pull request. The image is not yet published to a registry. Publishing, and the deployment target, are decisions still to make.

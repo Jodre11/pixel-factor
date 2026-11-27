@@ -1,5 +1,8 @@
 {
   "name": "pixel-factor",
   "image": "mcr.microsoft.com/devcontainers/rust:1",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
   "postCreateCommand": "sudo apt-get update && sudo apt-get install -y shellcheck && make setup"
 }

@@ -29,7 +29,8 @@ Everything goes through the Makefile. `make help` lists the targets.
 | `make timing` | Time one enrolment and verification at production settings. |
 | `make serve` | Run the HTTP service locally with development settings. Prints its address. |
 | `make smoke` | Start a throwaway service, drive enrol and verify over HTTP, stop it. |
-| `make image` | Build the service container image. Needs Docker. `scripts/container-smoke.sh` then runs and drives it. |
+| `make image` | Build the service container image. Needs Docker. The tag is named after the checkout's directory, so worktrees do not overwrite each other's image; set `IMAGE=` to choose one. |
+| `make container-smoke` | Run the image built by `make image` and drive it over HTTP, then remove it. |
 | `make iac-scan` | Trivy misconfiguration scan of the `Dockerfile` and workflows. |
 | `make image-scan` | Trivy vulnerability scan of the built image. |
 
@@ -50,7 +51,7 @@ The toolchain is pinned in `rust-toolchain.toml`; rustup installs it on first us
 | `make shellcheck` | Mistakes in the shell scripts. |
 | `make fuzz-check` | A fuzz target that no longer compiles. |
 
-Slower gates run in CI but not in `make check`: `make smoke`, `make coverage` and a container job (Trivy scans of the `Dockerfile` and image, then `scripts/container-smoke.sh`) on every pull request, and `make mutants`, `make fuzz` and `make advisories` weekly.
+Slower gates run in CI but not in `make check`: `make smoke`, `make coverage` and a container job (Trivy scans of the `Dockerfile` and image, then `make container-smoke`) on every pull request, and `make mutants`, `make fuzz` and `make advisories` weekly.
 
 If a gate blocks a change you believe is right, fix the code or raise it. Do not silence a lint with `#[allow]` unless the reason is written beside it, as in `core/src/geometry.rs`.
 
@@ -121,7 +122,7 @@ Coordinates are in units of image width, never pixels: x runs 0 to 1, y runs 0 t
 
 Safe. The core does no I/O: no ports, no files, no environment variables, no shared state. Tests build everything in memory. Each worktree gets its own `target/` directory.
 
-The service takes its port and database path from the environment. `make serve` binds a free port by default, and `make smoke` uses its own temporary database, so copies in several worktrees do not collide. Do not hard-code either.
+The service takes its port and database path from the environment. `make image` tags the image after the checkout's directory, and `make container-smoke` names its container after its process id and binds a free host port. `make serve` binds a free port by default, and `make smoke` uses its own temporary database, so copies in several worktrees do not collide. Do not hard-code either.
 
 ## Outside dependencies
 
