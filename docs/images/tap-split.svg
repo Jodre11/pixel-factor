@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 440" width="760" height="440" role="img" aria-label="A tap split into a secret anchor and a public offset">
+<title>A tap split into a secret anchor and a public offset</title>
+<rect width="760" height="440" rx="12" fill="#ffffff"/>
+<defs>
+<marker id="a-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/></marker>
+<marker id="a-edge" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#d97706"/></marker>
+<marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/></marker>
+</defs>
+<defs><clipPath id="c1"><rect x="24" y="24" width="446" height="392" rx="8"/></clipPath>
+</defs>
+<g clip-path="url(#c1)">
+<polygon points="0.16,-55.00 40.00,-32.00 40.00,14.00 0.16,37.00 -39.67,14.00 -39.67,-32.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="0.16" cy="-9.00" r="2.6" fill="#8a93a0"/>
+<polygon points="79.84,-55.00 119.67,-32.00 119.67,14.00 79.84,37.00 40.00,14.00 40.00,-32.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="79.84" cy="-9.00" r="2.6" fill="#8a93a0"/>
+<polygon points="159.51,-55.00 199.35,-32.00 199.35,14.00 159.51,37.00 119.67,14.00 119.67,-32.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="159.51" cy="-9.00" r="2.6" fill="#8a93a0"/>
+<polygon points="239.19,-55.00 279.02,-32.00 279.02,14.00 239.19,37.00 199.35,14.00 199.35,-32.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="239.19" cy="-9.00" r="2.6" fill="#8a93a0"/>
+<polygon points="318.86,-55.00 358.70,-32.00 358.70,14.00 318.86,37.00 279.02,14.00 279.02,-32.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="318.86" cy="-9.00" r="2.6" fill="#8a93a0"/>
+<polygon points="398.53,-55.00 438.37,-32.00 438.37,14.00 398.53,37.00 358.70,14.00 358.70,-32.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="398.53" cy="-9.00" r="2.6" fill="#8a93a0"/>
+<polygon points="478.21,-55.00 518.05,-32.00 518.05,14.00 478.21,37.00 438.37,14.00 438.37,-32.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="478.21" cy="-9.00" r="2.6" fill="#8a93a0"/>
+<polygon points="40.00,14.00 79.84,37.00 79.84,83.00 40.00,106.00 0.16,83.00 0.16,37.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="40.00" cy="60.00" r="2.6" fill="#8a93a0"/>
+<polygon points="119.67,14.00 159.51,37.00 159.51,83.00 119.67,106.00 79.84,83.00 79.84,37.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="119.67" cy="60.00" r="2.6" fill="#8a93a0"/>
+<polygon points="199.35,14.00 239.19,37.00 239.19,83.00 199.35,106.00 159.51,83.00 159.51,37.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="199.35" cy="60.00" r="2.6" fill="#8a93a0"/>
+<polygon points="279.02,14.00 318.86,37.00 318.86,83.00 279.02,106.00 239.19,83.00 239.19,37.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="279.02" cy="60.00" r="2.6" fill="#8a93a0"/>
+<polygon points="358.70,14.00 398.53,37.00 398.53,83.00 358.70,106.00 318.86,83.00 318.86,37.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="358.70" cy="60.00" r="2.6" fill="#8a93a0"/>
+<polygon points="438.37,14.00 478.21,37.00 478.21,83.00 438.37,106.00 398.53,83.00 398.53,37.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="438.37" cy="60.00" r="2.6" fill="#8a93a0"/>
+<polygon points="0.16,83.00 40.00,106.00 40.00,152.00 0.16,175.00 -39.67,152.00 -39.67,106.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="0.16" cy="129.00" r="2.6" fill="#8a93a0"/>
+<polygon points="79.84,83.00 119.67,106.00 119.67,152.00 79.84,175.00 40.00,152.00 40.00,106.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="79.84" cy="129.00" r="2.6" fill="#8a93a0"/>
+<polygon points="159.51,83.00 199.35,106.00 199.35,152.00 159.51,175.00 119.67,152.00 119.67,106.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="159.51" cy="129.00" r="2.6" fill="#8a93a0"/>
+<polygon points="239.19,83.00 279.02,106.00 279.02,152.00 239.19,175.00 199.35,152.00 199.35,106.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="239.19" cy="129.00" r="2.6" fill="#8a93a0"/>
+<polygon points="318.86,83.00 358.70,106.00 358.70,152.00 318.86,175.00 279.02,152.00 279.02,106.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="318.86" cy="129.00" r="2.6" fill="#8a93a0"/>
+<polygon points="398.53,83.00 438.37,106.00 438.37,152.00 398.53,175.00 358.70,152.00 358.70,106.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="398.53" cy="129.00" r="2.6" fill="#8a93a0"/>
+<polygon points="478.21,83.00 518.05,106.00 518.05,152.00 478.21,175.00 438.37,152.00 438.37,106.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="478.21" cy="129.00" r="2.6" fill="#8a93a0"/>
+<polygon points="40.00,152.00 79.84,175.00 79.84,221.00 40.00,244.00 0.16,221.00 0.16,175.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="40.00" cy="198.00" r="2.6" fill="#8a93a0"/>
+<polygon points="119.67,152.00 159.51,175.00 159.51,221.00 119.67,244.00 79.84,221.00 79.84,175.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="119.67" cy="198.00" r="2.6" fill="#8a93a0"/>
+<polygon points="199.35,152.00 239.19,175.00 239.19,221.00 199.35,244.00 159.51,221.00 159.51,175.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="199.35" cy="198.00" r="2.6" fill="#8a93a0"/>
+<polygon points="279.02,152.00 318.86,175.00 318.86,221.00 279.02,244.00 239.19,221.00 239.19,175.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="279.02" cy="198.00" r="2.6" fill="#8a93a0"/>
+<polygon points="358.70,152.00 398.53,175.00 398.53,221.00 358.70,244.00 318.86,221.00 318.86,175.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="358.70" cy="198.00" r="2.6" fill="#8a93a0"/>
+<polygon points="438.37,152.00 478.21,175.00 478.21,221.00 438.37,244.00 398.53,221.00 398.53,175.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="438.37" cy="198.00" r="2.6" fill="#8a93a0"/>
+<polygon points="0.16,221.00 40.00,244.00 40.00,290.00 0.16,313.00 -39.67,290.00 -39.67,244.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="0.16" cy="267.00" r="2.6" fill="#8a93a0"/>
+<polygon points="79.84,221.00 119.67,244.00 119.67,290.00 79.84,313.00 40.00,290.00 40.00,244.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="79.84" cy="267.00" r="2.6" fill="#8a93a0"/>
+<polygon points="159.51,221.00 199.35,244.00 199.35,290.00 159.51,313.00 119.67,290.00 119.67,244.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="159.51" cy="267.00" r="2.6" fill="#8a93a0"/>
+<polygon points="239.19,221.00 279.02,244.00 279.02,290.00 239.19,313.00 199.35,290.00 199.35,244.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="239.19" cy="267.00" r="2.6" fill="#8a93a0"/>
+<polygon points="318.86,221.00 358.70,244.00 358.70,290.00 318.86,313.00 279.02,290.00 279.02,244.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="318.86" cy="267.00" r="2.6" fill="#8a93a0"/>
+<polygon points="398.53,221.00 438.37,244.00 438.37,290.00 398.53,313.00 358.70,290.00 358.70,244.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="398.53" cy="267.00" r="2.6" fill="#8a93a0"/>
+<polygon points="478.21,221.00 518.05,244.00 518.05,290.00 478.21,313.00 438.37,290.00 438.37,244.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="478.21" cy="267.00" r="2.6" fill="#8a93a0"/>
+<polygon points="40.00,290.00 79.84,313.00 79.84,359.00 40.00,382.00 0.16,359.00 0.16,313.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="40.00" cy="336.00" r="2.6" fill="#8a93a0"/>
+<polygon points="119.67,290.00 159.51,313.00 159.51,359.00 119.67,382.00 79.84,359.00 79.84,313.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="119.67" cy="336.00" r="2.6" fill="#8a93a0"/>
+<polygon points="199.35,290.00 239.19,313.00 239.19,359.00 199.35,382.00 159.51,359.00 159.51,313.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="199.35" cy="336.00" r="2.6" fill="#8a93a0"/>
+<polygon points="279.02,290.00 318.86,313.00 318.86,359.00 279.02,382.00 239.19,359.00 239.19,313.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="279.02" cy="336.00" r="2.6" fill="#8a93a0"/>
+<polygon points="358.70,290.00 398.53,313.00 398.53,359.00 358.70,382.00 318.86,359.00 318.86,313.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="358.70" cy="336.00" r="2.6" fill="#8a93a0"/>
+<polygon points="438.37,290.00 478.21,313.00 478.21,359.00 438.37,382.00 398.53,359.00 398.53,313.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="438.37" cy="336.00" r="2.6" fill="#8a93a0"/>
+<polygon points="0.16,359.00 40.00,382.00 40.00,428.00 0.16,451.00 -39.67,428.00 -39.67,382.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="0.16" cy="405.00" r="2.6" fill="#8a93a0"/>
+<polygon points="79.84,359.00 119.67,382.00 119.67,428.00 79.84,451.00 40.00,428.00 40.00,382.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="79.84" cy="405.00" r="2.6" fill="#8a93a0"/>
+<polygon points="159.51,359.00 199.35,382.00 199.35,428.00 159.51,451.00 119.67,428.00 119.67,382.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="159.51" cy="405.00" r="2.6" fill="#8a93a0"/>
+<polygon points="239.19,359.00 279.02,382.00 279.02,428.00 239.19,451.00 199.35,428.00 199.35,382.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="239.19" cy="405.00" r="2.6" fill="#8a93a0"/>
+<polygon points="318.86,359.00 358.70,382.00 358.70,428.00 318.86,451.00 279.02,428.00 279.02,382.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="318.86" cy="405.00" r="2.6" fill="#8a93a0"/>
+<polygon points="398.53,359.00 438.37,382.00 438.37,428.00 398.53,451.00 358.70,428.00 358.70,382.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="398.53" cy="405.00" r="2.6" fill="#8a93a0"/>
+<polygon points="478.21,359.00 518.05,382.00 518.05,428.00 478.21,451.00 438.37,428.00 438.37,382.00" fill="none" stroke="#c4cad3" stroke-width="1.2"/>
+<circle cx="478.21" cy="405.00" r="2.6" fill="#8a93a0"/>
+<polygon points="199.35,198.00 279.02,198.00 318.86,267.00 239.19,267.00" fill="#fef3c7" fill-opacity="0.75" stroke="#d97706" stroke-width="2"/>
+<line x1="199.35" y1="198.00" x2="262.29" y2="226.98" stroke="#2563eb" stroke-width="2.5" marker-end="url(#a-accent)"/>
+<circle cx="199.35" cy="198.00" r="7" fill="#d97706" stroke="#ffffff" stroke-width="2"/>
+<circle cx="262.29" cy="226.98" r="8" fill="#1f2937" stroke="#ffffff" stroke-width="2"/>
+</g>
+<rect x="24" y="24" width="446" height="392" rx="8" fill="none" stroke="#c4cad3"/>
+<text x="274.3" y="249.0" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" fill="#1f2937" text-anchor="start" font-weight="bold">tap</text>
+<text x="189.3" y="186.0" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" fill="#d97706" text-anchor="end" font-weight="bold">anchor</text>
+<text x="500.0" y="70.0" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" fill="#1f2937" text-anchor="start" font-weight="bold">One tap becomes two values</text>
+<circle cx="508" cy="112" r="7" fill="#d97706"/>
+<text x="526.0" y="117.0" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" fill="#1f2937" text-anchor="start" font-weight="bold">Anchor: the lattice point at</text>
+<text x="526.0" y="139.0" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" fill="#5b6472" text-anchor="start" font-weight="normal">the corner of the tap's cell.</text>
+<text x="526.0" y="161.0" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" fill="#5b6472" text-anchor="start" font-weight="normal">Its two whole numbers are the</text>
+<text x="526.0" y="183.0" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" fill="#5b6472" text-anchor="start" font-weight="normal">cell index. Secret: hashed only.</text>
+<line x1="500" y1="228" x2="518" y2="228" stroke="#2563eb" stroke-width="2.5" marker-end="url(#a-accent)"/>
+<text x="526.0" y="233.0" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" fill="#1f2937" text-anchor="start" font-weight="bold">Offset: from anchor to tap.</text>
+<text x="526.0" y="255.0" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" fill="#5b6472" text-anchor="start" font-weight="normal">Where the tap sits inside the</text>
+<text x="526.0" y="277.0" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" fill="#5b6472" text-anchor="start" font-weight="normal">shaded cell, never which cell.</text>
+<text x="526.0" y="299.0" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" fill="#5b6472" text-anchor="start" font-weight="normal">Stored, encrypted after tap 1.</text>
+<rect x="500" y="330" width="16" height="16" fill="#fef3c7" stroke="#d97706"/>
+<text x="526.0" y="343.0" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" fill="#5b6472" text-anchor="start" font-weight="normal">The cell: one step of each</text>
+<text x="526.0" y="365.0" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" fill="#5b6472" text-anchor="start" font-weight="normal">lattice direction from the anchor.</text>
+<circle cx="508" cy="392" r="2.6" fill="#8a93a0"/>
+<text x="526.0" y="397.0" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" fill="#5b6472" text-anchor="start" font-weight="normal">Lattice point (hexagon centre).</text>
+</svg>

@@ -18,6 +18,7 @@ A change to the stored record format is always called out here, with the new `RE
 - Quality gates: strict lints, property tests, a fuzz target for `verify`, mutation testing, line coverage with a 98% floor, dependency policy with `cargo-deny`, and ShellCheck.
 - CI: `make check` and `make coverage` on every pull request, and weekly advisories, mutation testing and fuzzing.
 - Documentation: product principles, design spec, byte-level format notes, threat model and FAQ.
+- `docs/HOW-IT-WORKS.md`: a plain-language explainer with geometry diagrams (generated SVGs) and Mermaid flowcharts, linked from the README.
 
 ### Dependencies
 
