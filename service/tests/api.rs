@@ -591,3 +591,38 @@ async fn internal_errors_are_generic_500s() {
     }
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[tokio::test]
+async fn control_characters_in_user_ids_are_refused() {
+    let app = app();
+    for user in ["a\nb", "a\rb", "a\u{1b}[31m", "a\u{0}"] {
+        let (status, _) = post(&app, "/v1/verify", json!({"user_id": user, "taps": five()})).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{user:?}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_attempts_cannot_exceed_the_limit() {
+    // Twenty guesses at once: at most five are checked against the record
+    // before the lock applies, and the right taps after them do not match.
+    let app = app();
+    enrol_alice(&app).await;
+    let mut handles = Vec::new();
+    for _ in 0..20 {
+        let app = app.clone();
+        handles.push(tokio::spawn(
+            async move { verify(&app, "alice", wrong()).await },
+        ));
+    }
+    let mut not_locked = 0;
+    for h in handles {
+        if h.await.unwrap()["locked"] == false {
+            not_locked += 1;
+        }
+    }
+    assert_eq!(not_locked, 4, "only the first four failures go unlocked");
+    assert_eq!(
+        verify(&app, "alice", five()).await,
+        json!({"match": false, "locked": true})
+    );
+}

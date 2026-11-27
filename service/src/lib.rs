@@ -274,7 +274,7 @@ async fn enrol_user(
             app2.pepper.as_ref(),
         )?;
         lock(&app2.store)?.put(&req.user_id, &enrolment.record)?;
-        tracing::info!(user_id = %req.user_id, image_id = %req.image_id, "enrolled");
+        tracing::info!(user_id = ?req.user_id, image_id = ?req.image_id, "enrolled");
         Ok(enrolment.warnings.iter().map(describe).collect())
     })
     .await?;
@@ -329,12 +329,22 @@ async fn verify_user(
 /// decoy, and the same failure bookkeeping, so neither the time taken nor the
 /// answer shows whether the user exists. Unknown ids are counted and locked
 /// exactly like known ones.
+///
+/// An attempt is counted as a failure before the taps are checked and cleared
+/// only on a match, so concurrent attempts cannot all slip in under the limit.
 fn verify_blocking(app: &App, user_id: &str, taps: &[Point]) -> Result<VerifyAnswer, ApiError> {
     let now = unix_now();
     let window = app.lockout.window_secs;
-    let (record, failures) = {
+    let (record, attempt) = {
         let store = lock(&app.store)?;
-        (store.get(user_id)?, store.failures(user_id, now, window)?)
+        let record = store.get(user_id)?;
+        let failures = store.failures(user_id, now, window)?;
+        let attempt = if now < failures.locked_until {
+            None
+        } else {
+            Some(store.add_failure(user_id, now, window)?)
+        };
+        (record, attempt)
     };
     let matched = match &record {
         Some(record) => verify(taps, record, app.pepper.as_ref())?,
@@ -349,37 +359,36 @@ fn verify_blocking(app: &App, user_id: &str, taps: &[Point]) -> Result<VerifyAns
             false
         }
     };
-    if now < failures.locked_until {
-        tracing::info!(user_id, outcome = "locked", "verified");
-        return Ok(VerifyAnswer {
-            matched: false,
-            locked: true,
-        });
-    }
+    let locked_answer = VerifyAnswer {
+        matched: false,
+        locked: true,
+    };
+    let Some(count) = attempt else {
+        tracing::info!(user_id = ?user_id, outcome = "locked", "verified");
+        return Ok(locked_answer);
+    };
     let store = lock(&app.store)?;
-    if matched {
+    // A count over the limit means more attempts were in flight at once than
+    // the limit allows: this one does not get to match.
+    if matched && count <= app.lockout.max_failures {
         store.clear_failures(user_id)?;
-        tracing::info!(user_id, outcome = "match", "verified");
+        tracing::info!(user_id = ?user_id, outcome = "match", "verified");
         return Ok(VerifyAnswer {
             matched: true,
             locked: false,
         });
     }
-    let count = store.add_failure(user_id, now, window)?;
     let locked_until = app.lockout.until(count, now);
     store.set_locked_until(user_id, locked_until)?;
     store.prune_failures(now, window)?;
     let locked = locked_until > now;
-    tracing::info!(
-        user_id,
-        outcome = "no_match",
-        failures = count,
-        locked,
-        "verified"
-    );
+    tracing::info!(user_id = ?user_id, outcome = "no_match", failures = count, locked, "verified");
+    if locked {
+        return Ok(locked_answer);
+    }
     Ok(VerifyAnswer {
         matched: false,
-        locked,
+        locked: false,
     })
 }
 
@@ -391,7 +400,7 @@ async fn delete_user(
     let app2 = app.clone();
     blocking(move || {
         lock(&app2.store)?.delete(&user_id)?;
-        tracing::info!(user_id = %user_id, "deleted");
+        tracing::info!(user_id = ?user_id, "deleted");
         Ok(())
     })
     .await?;
@@ -399,9 +408,13 @@ async fn delete_user(
 }
 
 fn check_user_id(user_id: &str) -> Result<(), ApiError> {
-    if user_id.is_empty() || user_id.len() > MAX_USER_ID_LEN {
+    // Control characters are refused so that a user id cannot forge log lines.
+    if user_id.is_empty()
+        || user_id.len() > MAX_USER_ID_LEN
+        || user_id.chars().any(char::is_control)
+    {
         return Err(ApiError::Rejected(format!(
-            "user_id must be 1 to {MAX_USER_ID_LEN} bytes"
+            "user_id must be 1 to {MAX_USER_ID_LEN} bytes with no control characters"
         )));
     }
     Ok(())
