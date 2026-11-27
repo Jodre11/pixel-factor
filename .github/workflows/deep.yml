@@ -66,7 +66,7 @@ jobs:
             ~/.cargo/bin
             ~/.cargo/registry
             ~/.cargo/git
-          key: deep-fuzz-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'fuzz/Cargo.lock', 'scripts/install-tools.sh') }}
+          key: deep-fuzz-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'scripts/install-tools.sh') }}
       - name: Set up
         run: |
           make setup

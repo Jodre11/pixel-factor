@@ -16,7 +16,7 @@ help: ## List the available commands
 setup: ## Prepare a fresh checkout: git hooks, dependencies, analysis tools
 	@if git rev-parse --git-dir >/dev/null 2>&1; then git config core.hooksPath .githooks; fi
 	cargo fetch --locked
-	cargo fetch --locked --manifest-path fuzz/Cargo.toml
+	cargo fetch --manifest-path fuzz/Cargo.toml
 	@scripts/install-tools.sh
 
 tools-deep: ## Install the tools for coverage, mutation testing and fuzzing
@@ -52,7 +52,7 @@ shellcheck: ## Lint the shell scripts
 	shellcheck scripts/*.sh .githooks/pre-commit
 
 fuzz-check: ## Compile the fuzz target, so it cannot rot
-	cargo check --manifest-path fuzz/Cargo.toml --locked --offline
+	cargo check --manifest-path fuzz/Cargo.toml --offline
 
 advisories: ## Check dependencies against the RustSec advisory database (needs network)
 	cargo deny check advisories
