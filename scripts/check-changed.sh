@@ -8,7 +8,8 @@
 #
 # Rules:
 #   - workspace-wide files changed  -> the full `make check`
-#   - files inside a crate changed  -> format, lint and test that crate only
+#     (manifests, toolchain, Makefile, scripts, fuzz target, dependency policy)
+#   - files inside a crate changed  -> format, lint, test and document that crate only
 #   - markdown changed              -> the docs check
 #   - anything else                 -> nothing to prove
 set -eu
@@ -38,7 +39,7 @@ docs=0
 crates=""
 for f in $files; do
     case "$f" in
-        Cargo.toml | Cargo.lock | rust-toolchain.toml | Makefile | scripts/* | .github/workflows/* | .githooks/*)
+        Cargo.toml | Cargo.lock | rust-toolchain.toml | Makefile | deny.toml | scripts/* | fuzz/* | .cargo/* | .github/workflows/* | .githooks/*)
             full=1
             ;;
         *.md)
@@ -63,8 +64,9 @@ for dir in $crates; do
     name=$(sed -n 's/^name *= *"\(.*\)"/\1/p' "$dir/Cargo.toml" | head -n 1)
     echo "check-changed: checking crate $name ($dir/)"
     cargo fmt -p "$name" --check
-    cargo clippy -p "$name" --all-targets --locked -- -D warnings
+    cargo clippy -p "$name" --all-targets --locked --offline -- -D warnings
     cargo test -p "$name" --locked --offline
+    RUSTDOCFLAGS="-D warnings" cargo doc -p "$name" --no-deps --locked --offline
 done
 
 if [ "$docs" -eq 1 ]; then

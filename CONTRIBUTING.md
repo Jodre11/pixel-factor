@@ -18,6 +18,17 @@ To see what has been done: `git log`, and the closed pull requests.
 
 A pull request is ready to merge when CI is green and the code owner has approved it. Code owners are listed in `.github/CODEOWNERS`.
 
+## Quality gates
+
+`make check` is the gate. It covers formatting, Clippy with strict lints, unit and property tests, API docs, dependency policy and shell linting. [AGENTS.md](AGENTS.md) lists each gate and what it catches.
+
+CI also runs `make coverage` on every pull request, and mutation testing, fuzzing and a vulnerability check weekly.
+
+- New behaviour needs a test. Where there is an invariant, state it as a property test in `core/tests/properties.rs`.
+- Coverage may not fall below the floor set by `COVERAGE_MIN` in the `Makefile`. Raise the floor when coverage rises; do not lower it to pass.
+- A surviving mutant in the weekly run means a test is missing. Add the test.
+- These gates stop regressions. They do not show the design is secure. That needs human review.
+
 ## Commits
 
 - Subject line in the imperative, 72 characters or fewer: "Add pepper rotation helper".

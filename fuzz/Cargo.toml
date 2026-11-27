@@ -1,0 +1,23 @@
+[package]
+name = "pixel-factor-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+pixel-factor-core = { path = "../core" }
+
+[[bin]]
+name = "verify"
+path = "fuzz_targets/verify.rs"
+test = false
+doc = false
+bench = false
+
+# Not a member of the root workspace: it needs a nightly toolchain to run.
+[workspace]

@@ -16,15 +16,38 @@ Everything goes through the Makefile. `make help` lists the targets.
 
 | Command | Use it to |
 |---|---|
-| `make setup` | Prepare a fresh checkout. Installs the git hooks and fetches dependencies. Runs automatically at session start and in the devcontainer. |
-| `make check` | Prove a change is sound: format, lint, tests, docs. This is what CI runs. |
+| `make setup` | Prepare a fresh checkout. Installs the git hooks, fetches dependencies and installs the analysis tools. Runs automatically at session start and in the devcontainer. The first run builds `cargo-deny` and takes a few minutes; later runs are instant. |
+| `make check` | Prove a change is sound. This is what CI runs. See the gates below. |
 | `make check-changed` | Check only what changed. Use this while iterating. The pre-commit hook runs the staged version. |
 | `make fmt` | Format the code. |
-| `make test` | Run the tests only. |
+| `make test` | Run the tests only, including the property tests. |
+| `make coverage` | Line coverage with a floor. CI runs it. Needs `make tools-deep` once. |
+| `make mutants` | Mutation testing. Slow; CI runs it weekly. Needs `make tools-deep` once. |
+| `make fuzz` | Fuzz `verify`. CI runs it weekly. Needs `make tools-deep` once and a nightly toolchain. |
+| `make advisories` | Check dependencies for known vulnerabilities. Needs network. CI runs it weekly. |
 | `make kat` | Print the known-answer record. |
 | `make timing` | Time one enrolment and verification at production settings. |
 
-The toolchain is pinned in `rust-toolchain.toml`; rustup installs it on first use. Nothing else needs installing.
+The toolchain is pinned in `rust-toolchain.toml`; rustup installs it on first use. `make setup` installs everything else. The one thing it may not manage is `shellcheck` on a machine with neither Homebrew nor apt: it says so, and you install it once by hand.
+
+## Quality gates
+
+`make check` runs all of these and fails on any:
+
+| Gate | What it catches |
+|---|---|
+| `make fmt-check` | Unformatted code. |
+| `make lint` | Clippy warnings, plus the stricter lints set at the top of `core/src/lib.rs`: no `unwrap`, `expect`, `panic`, unchecked indexing or lossy `as` casts in library code, and no `unsafe` at all. |
+| `make test` | Unit, integration and property tests. Property tests state the invariants: taps inside tolerance always match, taps outside never do, and `verify` never errors or panics on any tap input. |
+| `make doc` | Missing or broken API documentation. Every public item must be documented. |
+| `make docs-check` | Markdown that names a `make` target or file that does not exist. |
+| `make deny` | Dependencies with a licence outside the allow list in `deny.toml`, from an unknown source, or with wildcard versions. |
+| `make shellcheck` | Mistakes in the shell scripts. |
+| `make fuzz-check` | A fuzz target that no longer compiles. |
+
+Three slower gates run in CI but not in `make check`: `make coverage` on every pull request, and `make mutants`, `make fuzz` and `make advisories` weekly.
+
+If a gate blocks a change you believe is right, fix the code or raise it. Do not silence a lint with `#[allow]` unless the reason is written beside it, as in `core/src/geometry.rs`.
 
 ## Layout
 
@@ -33,7 +56,10 @@ The toolchain is pinned in `rust-toolchain.toml`; rustup installs it on first us
 | `core/` | Rust library `pixel-factor-core`: geometry, enrolment, verification. No I/O. |
 | `core/src/geometry.rs` | Hexagon lattice maths. The only place geometry lives. |
 | `core/src/lib.rs` | `enrol`, `verify`, `Record`, `Policy`, `PepperProvider`. |
-| `core/tests/core.rs` | The test suite. |
+| `core/tests/core.rs` | Example-based tests. |
+| `core/tests/properties.rs` | Property tests. |
+| `fuzz/` | Fuzz target for `verify`. A separate crate, outside the workspace. |
+| `deny.toml` | Dependency policy. |
 | `core/tests/vectors/kat1.json` | Known-answer vector. Locks the record format. |
 | `docs/spec.md` | Design decisions and reasoning. |
 | `docs/core-format.md` | Byte-level formats. |
@@ -85,7 +111,7 @@ When the HTTP service lands, it must take its port and database path from the en
 
 ## Outside dependencies
 
-None at runtime. Tests run with `--offline`. The only network use is `cargo fetch` during `make setup`, once. The KMS is behind the `PepperProvider` trait, and `StaticPepper` is the in-memory substitute for development and tests.
+None at runtime. `make check` runs entirely offline. The only network use is in `make setup`, once, to fetch dependencies and build the tools, and in `make advisories`, which downloads the advisory database. The KMS is behind the `PepperProvider` trait, and `StaticPepper` is the in-memory substitute for development and tests.
 
 ## How work is done here
 

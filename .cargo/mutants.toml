@@ -1,0 +1,5 @@
+# cargo-mutants configuration. Run with `make mutants`.
+
+# A mutant that makes a test hang is caught by timeout. Argon2id makes the
+# suite slower than most, so allow some headroom.
+timeout_multiplier = 3.0

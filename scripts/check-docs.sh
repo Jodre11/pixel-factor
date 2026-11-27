@@ -14,7 +14,8 @@ files=$({ git ls-files '*.md'; git ls-files --others --exclude-standard '*.md'; 
 for f in $files; do
     [ -f "$f" ] || continue
 
-    for target in $(grep -o '`make [a-z-]*' "$f" | sed 's/^`make //' | sort -u); do
+    targets=$(grep -o '`make [a-z-]*' "$f" | sed 's/^`make //' | sort -u)
+    for target in $targets; do
         [ -n "$target" ] || continue
         if ! grep -q "^$target:" Makefile; then
             echo "$f: mentions \`make $target\`, which is not a Makefile target"
@@ -23,7 +24,8 @@ for f in $files; do
     done
 
     dir=$(dirname "$f")
-    for link in $(grep -o '](\([^)# ]*\)' "$f" | sed 's/^](//' | sort -u); do
+    links=$(grep -o '](\([^)# ]*\)' "$f" | sed 's/^](//' | sort -u)
+    for link in $links; do
         case "$link" in
             "" | http://* | https://* | mailto:*) continue ;;
         esac

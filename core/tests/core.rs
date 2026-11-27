@@ -60,7 +60,7 @@ fn hex_round_picks_nearest_centre() {
 
 #[test]
 fn tolerance_is_a_hexagon_around_the_enrolled_point() {
-    let lattice = Lattice::new(0.022);
+    let lattice = Lattice::new(0.022).unwrap();
     let (r, s) = (lattice.inradius(), lattice.circumradius());
     let mut rng = Lcg(42);
     for _ in 0..20_000 {
@@ -82,7 +82,7 @@ fn tolerance_is_a_hexagon_around_the_enrolled_point() {
 fn offset_does_not_depend_on_which_cell() {
     // Shifting a point by a whole lattice vector changes the index but not
     // the offset, so the offset says nothing about the cell.
-    let lattice = Lattice::new(0.022);
+    let lattice = Lattice::new(0.022).unwrap();
     let step = 2.0 * lattice.inradius(); // length of basis vector a1
     let p = Point::new(0.2, 0.3);
     let (i1, o1) = lattice.split(p);
@@ -107,7 +107,7 @@ fn exact_taps_verify() {
 fn nearby_taps_verify_and_far_taps_do_not() {
     let policy = test_policy();
     let e = enrol(&five(), "img-1", &policy, &pepper()).unwrap();
-    let s = Lattice::new(policy.r).circumradius();
+    let s = Lattice::new(policy.r).unwrap().circumradius();
     let mut rng = Lcg(7);
     for _ in 0..50 {
         let near: Vec<Point> = five()
@@ -270,7 +270,7 @@ fn one_revisit_is_allowed_and_snapped() {
 
     // A tap that is near A' but outside A's hexagon is rejected, because the
     // region was snapped to A, not centred on A'.
-    let lattice = Lattice::new(policy.r);
+    let lattice = Lattice::new(policy.r).unwrap();
     let far_side = Point::new(a2.x + 0.02, a2.y);
     assert!(!lattice.within_tolerance(a, far_side));
     login[2] = far_side;
@@ -377,4 +377,248 @@ fn known_answer_vector() {
     let e = enrol_with_salt(&five(), "kat-image", &test_policy(), &pepper(), salt).unwrap();
     let json = serde_json::to_string(&e.record).unwrap();
     assert_eq!(json, include_str!("vectors/kat1.json").trim());
+}
+
+// ---------- input limits ----------
+
+#[test]
+fn tolerance_outside_the_supported_range_is_rejected() {
+    for r in [0.0, -0.01, 0.00009, 0.25, 0.3, f64::NAN, f64::INFINITY] {
+        assert!(Lattice::new(r).is_none(), "r = {r}");
+        let policy = Policy { r, ..test_policy() };
+        assert!(matches!(
+            enrol(&five(), "i", &policy, &pepper()),
+            Err(Error::InvalidPolicy(_))
+        ));
+    }
+    assert!(Lattice::new(0.0001).is_some());
+    assert!(Lattice::new(0.2499).is_some());
+}
+
+#[test]
+fn aspect_outside_the_supported_range_is_rejected() {
+    for aspect in [0.0, -1.0, 16.5, f64::NAN, f64::INFINITY] {
+        let policy = Policy {
+            aspect,
+            ..test_policy()
+        };
+        assert!(matches!(
+            enrol(&five(), "i", &policy, &pepper()),
+            Err(Error::InvalidPolicy(_))
+        ));
+    }
+}
+
+#[test]
+fn image_id_must_be_present_and_bounded() {
+    let p = test_policy();
+    assert_eq!(
+        enrol(&five(), "", &p, &pepper()).unwrap_err(),
+        Error::InvalidImageId
+    );
+    let long = "x".repeat(256);
+    assert_eq!(
+        enrol(&five(), &long, &p, &pepper()).unwrap_err(),
+        Error::InvalidImageId
+    );
+    assert!(enrol(&five(), &"x".repeat(255), &p, &pepper()).is_ok());
+}
+
+#[test]
+fn malformed_records_are_errors_not_mismatches() {
+    let good = enrol(&five(), "img-1", &test_policy(), &pepper())
+        .unwrap()
+        .record;
+
+    let mut r = good.clone();
+    r.version = 2;
+    assert!(matches!(
+        verify(&five(), &r, &pepper()),
+        Err(Error::InvalidRecord(_))
+    ));
+
+    let mut r = good.clone();
+    r.enc_offsets.pop();
+    assert!(matches!(
+        verify(&five(), &r, &pepper()),
+        Err(Error::InvalidRecord(_))
+    ));
+
+    let mut r = good.clone();
+    r.enc_offsets = vec![0; 4 * 32];
+    assert!(matches!(
+        verify(&five(), &r, &pepper()),
+        Err(Error::InvalidRecord(_))
+    ));
+
+    for bad_r in [0.0, 0.5, f64::NAN] {
+        let mut r = good.clone();
+        r.r = bad_r;
+        assert!(matches!(
+            verify(&five(), &r, &pepper()),
+            Err(Error::InvalidRecord(_))
+        ));
+    }
+
+    let mut r = good.clone();
+    r.aspect = f64::INFINITY;
+    assert!(matches!(
+        verify(&five(), &r, &pepper()),
+        Err(Error::InvalidRecord(_))
+    ));
+
+    let mut r = good;
+    r.image_id = String::new();
+    assert!(matches!(
+        verify(&five(), &r, &pepper()),
+        Err(Error::InvalidRecord(_))
+    ));
+}
+
+#[test]
+fn the_smallest_tolerance_still_round_trips() {
+    // Far more cells than the default, to exercise large indices.
+    let policy = Policy {
+        r: 0.0001,
+        aspect: 16.0,
+        ..test_policy()
+    };
+    let taps = vec![
+        Point::new(0.999, 15.99),
+        Point::new(0.001, 0.001),
+        Point::new(0.5, 8.0),
+        Point::new(0.25, 12.0),
+        Point::new(0.75, 4.0),
+    ];
+    let e = enrol(&taps, "i", &policy, &pepper()).unwrap();
+    assert!(verify(&taps, &e.record, &pepper()).unwrap());
+    let mut off = taps.clone();
+    off[0] = Point::new(0.999 - 0.00013, 15.99);
+    assert!(!verify(&off, &e.record, &pepper()).unwrap());
+}
+
+// ---------- boundaries found by mutation testing ----------
+
+#[test]
+fn hex_round_breaks_ties_the_same_way_every_time() {
+    // On a cell edge either neighbour is a correct answer. Which one is
+    // chosen must never change, or boundary taps would flip between releases.
+    assert_eq!(hex_round(0.5, 0.5), (1, 0));
+    assert_eq!(hex_round(0.5, -1.0), (1, -1));
+    assert_eq!(hex_round(0.5, 0.0), (1, 0));
+    assert_eq!(hex_round(-0.5, 0.0), (-1, 0));
+}
+
+#[test]
+fn errors_describe_themselves() {
+    let text = Error::TapCount {
+        min: 5,
+        max: 6,
+        got: 4,
+    }
+    .to_string();
+    assert!(text.contains("TapCount") && text.contains('4'), "{text}");
+    assert!(Error::InvalidImageId.to_string().contains("InvalidImageId"));
+}
+
+#[test]
+fn records_carry_the_pepper_version_in_use() {
+    let p7 = StaticPepper::new(7, b"another pepper".to_vec());
+    let record = enrol(&five(), "i", &test_policy(), &p7).unwrap().record;
+    assert_eq!(record.pepper_version, 7);
+    assert!(verify(&five(), &record, &p7).unwrap());
+}
+
+#[test]
+fn policy_limits_are_exact() {
+    // Fewer than two distinct points is never a sequence.
+    let one = Policy {
+        min_distinct: 1,
+        max_revisits: 0,
+        ..test_policy()
+    };
+    assert!(matches!(
+        enrol(&five(), "i", &one, &pepper()),
+        Err(Error::InvalidPolicy(_))
+    ));
+    let two = Policy {
+        min_distinct: 2,
+        max_revisits: 0,
+        ..test_policy()
+    };
+    assert!(enrol(&five()[..2], "i", &two, &pepper()).is_ok());
+
+    // 32 taps is the most a policy may allow.
+    let at_limit = Policy {
+        min_distinct: 31,
+        max_revisits: 1,
+        ..test_policy()
+    };
+    assert!(matches!(
+        enrol(&five(), "i", &at_limit, &pepper()),
+        Err(Error::TapCount { max: 32, .. })
+    ));
+    let over_limit = Policy {
+        min_distinct: 31,
+        max_revisits: 2,
+        ..test_policy()
+    };
+    assert!(matches!(
+        enrol(&five(), "i", &over_limit, &pepper()),
+        Err(Error::InvalidPolicy(_))
+    ));
+}
+
+#[test]
+fn a_full_length_sequence_enrols_and_verifies() {
+    let policy = Policy {
+        min_distinct: 32,
+        max_revisits: 0,
+        ..test_policy()
+    };
+    // 32 points on a grid, visited in an order that keeps neighbours apart.
+    let taps: Vec<Point> = (0..32)
+        .map(|i| Point::new(0.05 + 0.1 * f64::from(i % 8), 0.1 + 0.15 * f64::from(i / 8)))
+        .collect();
+    let e = enrol(&taps, "i", &policy, &pepper()).unwrap();
+    assert_eq!(e.record.tap_count(), 32);
+    assert!(verify(&taps, &e.record, &pepper()).unwrap());
+}
+
+#[test]
+fn consecutive_taps_exactly_two_circumradii_apart_are_allowed() {
+    let policy = test_policy();
+    let s = Lattice::new(policy.r).unwrap().circumradius();
+    let mut taps = five();
+    taps[0] = Point::new(0.0, 0.4);
+    taps[1] = Point::new(2.0 * s, 0.4);
+    assert_eq!(taps[0].distance(&taps[1]), 2.0 * s);
+    assert!(enrol(&taps, "i", &policy, &pepper()).is_ok());
+
+    taps[1] = Point::new(2.0 * s - 1e-9, 0.4);
+    assert_eq!(
+        enrol(&taps, "i", &policy, &pepper()).unwrap_err(),
+        Error::ConsecutiveTooClose { tap: 1 }
+    );
+}
+
+#[test]
+fn points_exactly_four_r_apart_do_not_warn() {
+    let policy = test_policy();
+    let mut taps = five();
+    taps[0] = Point::new(0.0, 0.4);
+    taps[2] = Point::new(4.0 * policy.r, 0.4);
+    assert_eq!(taps[0].distance(&taps[2]), 4.0 * policy.r);
+    let e = enrol(&taps, "i", &policy, &pepper()).unwrap();
+    assert!(e.warnings.is_empty(), "{:?}", e.warnings);
+
+    taps[2] = Point::new(4.0 * policy.r - 1e-9, 0.4);
+    let e = enrol(&taps, "i", &policy, &pepper()).unwrap();
+    assert_eq!(
+        e.warnings,
+        vec![Warning::PointsClose {
+            first: 0,
+            second: 2
+        }]
+    );
 }
