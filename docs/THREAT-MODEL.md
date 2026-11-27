@@ -48,6 +48,7 @@ Client (tap page)  --taps, in width units-->  Service (core)  --HMAC request--> 
 - **The secret space is small.** About 44 theoretical bits at the default tolerance, and less in practice, because people favour the same points on an image. The working assumption is a loss of a third to a half. The pepper and rate limiting carry the security, not the key derivation function.
 - **The first offset is in the clear.** It shows where the first point sits within its cell, never which cell.
 - **Hotspots are estimated, not measured.** No user study has been run.
+- **Lockout can be used to keep a user out.** Failures are remembered for a day, so once a lock expires one wrong try renews it. Anyone who knows a username and can reach the tap step can keep that user locked with about 24 requests a day. Per-source throttling does not stop this; the defence is to place the tap step after another factor (see below).
 - **Unaudited.** No independent cryptographic review has been done.
 
 ## What the operator must provide
@@ -58,6 +59,7 @@ The core cannot enforce these. An integration that skips one loses the protectio
 - Rate limiting and lockout on the login endpoint.
 - Transport security between the client, the service and the KMS.
 - A possession factor alongside this one. It is a knowledge factor, not a sole factor.
+- That other factor checked first, before the tap step. Only someone who has passed it can then record a failure, so a stranger with a username cannot lock its owner out.
 - A reset path that proves identity another way before re-enrolment.
 
 ## Not addressed
