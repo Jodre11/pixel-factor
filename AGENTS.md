@@ -64,6 +64,8 @@ If a gate blocks a change you believe is right, fix the code or raise it. Do not
 | `docs/spec.md` | Design decisions and reasoning. |
 | `docs/core-format.md` | Byte-level formats. |
 | `docs/PRODUCT.md` | Audience, problem, principles, non-goals. |
+| `docs/THREAT-MODEL.md` | Attackers, protections, known limits, operator duties. |
+| `docs/FAQ.md` | Short answers to common review questions. |
 | `scripts/` | Check scripts used by the Makefile, the hook and CI. |
 
 Planned, not yet present: an HTTP service crate and a Keycloak authenticator plugin.
