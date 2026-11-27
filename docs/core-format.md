@@ -103,4 +103,4 @@ Release build, default Argon2id (64 MiB, 3 iterations): about 120 ms per enrolme
 - Pepper rotation helper (re-wrap on successful login).
 - Zeroising secrets in memory.
 - Independent review. Unaudited. The tests and gates stop regressions; they do not show the design is secure.
-- HTTP service, Keycloak plugin.
+- Keycloak plugin. The HTTP service is in `service/`; see `service.md`.

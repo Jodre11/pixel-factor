@@ -9,6 +9,8 @@ Each tap is accepted within a hexagonal tolerance of its enrolled position, so i
 
 Status: early and unaudited. Do not use to protect anything real yet.
 
+**New here? Start with [How it works](docs/HOW-IT-WORKS.md)**, a plain-language tour with diagrams.
+
 ## Cryptographic review wanted
 
 Nothing here has been independently reviewed. Before anyone relies on it, it needs people who know cryptography to try to break it. If that is you, please look.
@@ -50,19 +52,22 @@ The Rust toolchain is pinned in `rust-toolchain.toml` and installed by rustup on
 | Path | What |
 |---|---|
 | `core/` | Rust library: geometry, enrolment, verification. No I/O. |
-| `docs/` | Product, design spec and byte-level format notes. |
+| `service/` | HTTP service around the core: axum and SQLite, with a container image. |
+| `docs/` | How it works, product, design spec, byte-level formats, threat model and operations. |
 | `scripts/` | Check scripts used by the Makefile, the git hook and CI. |
 
-Planned: an HTTP service around the core, and a Keycloak authenticator plugin.
+Planned: a Keycloak authenticator plugin and a tap demo page.
 
 ## Read next
 
+- [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md): the design in plain language, with diagrams.
 - [AGENTS.md](AGENTS.md): how to work in this repo, vocabulary and gotchas.
 - [docs/PRODUCT.md](docs/PRODUCT.md): audience, principles and non-goals.
 - [docs/spec.md](docs/spec.md): the design and its reasoning.
 - [docs/core-format.md](docs/core-format.md): byte-level formats.
 - [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md): attackers, protections and known limits.
 - [docs/FAQ.md](docs/FAQ.md): why hexagons, why not a zero-knowledge proof, how many bits.
+- [docs/service.md](docs/service.md) and [docs/OPERATIONS.md](docs/OPERATIONS.md): running the HTTP service.
 - [CHANGELOG.md](CHANGELOG.md): what has changed.
 - [CONTRIBUTING.md](CONTRIBUTING.md): how changes are proposed and reviewed.
 - [SECURITY.md](SECURITY.md): reporting a vulnerability.

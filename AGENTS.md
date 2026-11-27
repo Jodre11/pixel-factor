@@ -70,6 +70,8 @@ If a gate blocks a change you believe is right, fix the code or raise it. Do not
 | `fuzz/` | Fuzz target for `verify`. A workspace member that shares `Cargo.lock`, excluded from the default build and tests. |
 | `deny.toml` | Dependency policy. |
 | `core/tests/vectors/kat2.json` | Known-answer vector. Locks the record format. |
+| `docs/HOW-IT-WORKS.md` | Plain-language explainer with diagrams. Keep it in step with the spec. |
+| `docs/images/` | Diagram SVGs, drawn by `docs/images/make_diagrams.py`. Regenerate, do not hand-edit. |
 | `docs/spec.md` | Design decisions and reasoning. |
 | `docs/core-format.md` | Byte-level formats. |
 | `docs/PRODUCT.md` | Audience, problem, principles, non-goals. |

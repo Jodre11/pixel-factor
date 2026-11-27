@@ -246,8 +246,8 @@ Rejected for now: loading Rust into Keycloak's JVM (JNI or a Java WASM runtime).
 ## 17. Build order and status
 
 1. Rust core library, with test vectors. DONE: `pixel-factor-core` v0.1. Example, property and known-answer tests, fuzzing and mutation testing. Unaudited.
-2. Rust HTTP service. Next.
-3. Keycloak authenticator plugin: first working demo, Keycloak in Docker.
+2. Rust HTTP service. DONE: `pixel-factor-service`, axum and SQLite, with lockout and a container image. See `service.md`.
+3. Keycloak authenticator plugin: first working demo, Keycloak in Docker. Next. The tap step runs only after another factor, so a stranger cannot use the lockout to keep a user out.
 4. OIDC host reusing the same service, for Entra ID external MFA and Okta's IdP authenticator, subject to how each classifies the factor type.
 
 Test early: enrol on desktop, log in on a phone.
@@ -271,9 +271,7 @@ This was a targeted lookup, not a formal clearance search.
 ## 19. Open questions
 
 - Hotspot mitigation beyond image vetting.
-- Record store choice for the service.
 - Which KMS for the first deployment.
-- Lockout policy numbers.
 - Pepper rotation helper in the core.
 - Zeroising secrets in memory.
 - Independent security review before any real use.
