@@ -92,11 +92,14 @@ Release build, default Argon2id (64 MiB, 3 iterations): about 120 ms per enrolme
 
 ## Tests
 
-22 tests: geometry (20,000 random points: always accepted inside r, always rejected beyond s), ordering, tap count, bounds, pepper mismatch and version, record binding, revisit snapping and concealment, enrolment rules, JSON round trip, and a known-answer vector (`tests/vectors/kat1.json`).
+- Example-based tests in `core/tests/core.rs`: geometry, ordering, tap count, bounds, pepper mismatch and version, record binding, revisit snapping and concealment, enrolment rules, input limits, exact boundaries, JSON round trip, and a known-answer vector (`tests/vectors/kat1.json`).
+- Property tests in `core/tests/properties.rs`: taps inside the inradius always match and taps beyond the circumradius never do, across every supported tolerance; valid sequences verify, one bad tap or any reordering fails; `verify` never errors on arbitrary taps or offsets and never panics on arbitrary records.
+- A fuzz target for `verify` in `fuzz/`.
+- Mutation testing (`make mutants`): every viable mutant of the core is caught.
 
 ## Not yet done
 
 - Pepper rotation helper (re-wrap on successful login).
 - Zeroising secrets in memory.
-- Independent review. Unaudited.
+- Independent review. Unaudited. The tests and gates stop regressions; they do not show the design is secure.
 - HTTP service, Keycloak plugin.
