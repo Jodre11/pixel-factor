@@ -25,7 +25,7 @@ A pull request is ready to merge when CI is green and the code owner has approve
 CI also runs `make coverage` on every pull request, and mutation testing, fuzzing and a vulnerability check weekly.
 
 - New behaviour needs a test. Where there is an invariant, state it as a property test in `core/tests/properties.rs`.
-- Coverage may not fall below the floor set by `COVERAGE_MIN` in the `Makefile`. Raise the floor when coverage rises; do not lower it to pass.
+- Coverage may not fall below the floors set by `COVERAGE_MIN` (core) and `SERVICE_COVERAGE_MIN` (service) in the `Makefile`. Raise the floor when coverage rises; do not lower it to pass.
 - A surviving mutant in the weekly run means a test is missing. Add the test.
 - These gates stop regressions. They do not show the design is secure. That needs human review.
 
