@@ -1,7 +1,7 @@
 # Every command an agent or contributor needs. Run `make help` for the list.
 
-# Lowest line coverage `make coverage` accepts, in percent.
-COVERAGE_MIN ?= 90
+# Lowest line coverage `make coverage` accepts, in percent. Measured at 98.68%.
+COVERAGE_MIN ?= 98
 # How long `make fuzz` runs, in seconds.
 FUZZ_SECONDS ?= 60
 # Parallel jobs for `make mutants`.
