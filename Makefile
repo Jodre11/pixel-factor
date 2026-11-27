@@ -68,8 +68,11 @@ advisories: ## Check dependencies against the RustSec advisory database (needs n
 	cargo deny check advisories
 
 coverage: ## Line coverage per crate, failing below COVERAGE_MIN (core) or SERVICE_COVERAGE_MIN
-	cargo llvm-cov --package pixel-factor-core --locked --offline --fail-under-lines $(COVERAGE_MIN)
-	cargo llvm-cov --package pixel-factor-service --locked --offline \
+	# A separate target directory per crate: cargo-llvm-cov reads every test binary in its directory, and a stale
+	# service binary built against an older core would be counted as an unexecuted second copy of the core.
+	CARGO_LLVM_COV_TARGET_DIR=target/llvm-cov-core \
+		cargo llvm-cov --package pixel-factor-core --locked --offline --fail-under-lines $(COVERAGE_MIN)
+	CARGO_LLVM_COV_TARGET_DIR=target/llvm-cov-service cargo llvm-cov --package pixel-factor-service --locked --offline \
 		--ignore-filename-regex 'service/src/main\.rs' --fail-under-lines $(SERVICE_COVERAGE_MIN)
 
 mutants: ## Mutation testing: break the code on purpose and see if a test notices (slow)

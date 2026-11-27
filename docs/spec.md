@@ -1,6 +1,8 @@
-# Pixel Based Factor Verification: Spec v0.7
+# Pixel Based Factor Verification: Spec v0.8
 
 Status: draft, 2026-11-27. Core library built (v0.1, unaudited).
+
+Changes in v0.8: sequences may be 5 to 8 taps. Revisits are no longer limited to one; any number is allowed within the tap count, provided there are at least 5 distinct points and no tap repeats the point just before it. The record format is unchanged.
 
 Changes in v0.7: the stored record no longer reveals the tap count. Offsets are padded to a fixed 31 slots with random fill (record format version 2).
 
@@ -35,7 +37,7 @@ No scheme makes the secret irreversible outright. The secret space is small (abo
 - Tap order matters.
 - One joint hash over the whole sequence. Never a hash per point.
 - Per-user salt, plus a pepper held outside the database.
-- Revisits allowed if not adjacent in the sequence.
+- Sequences of 5 to 8 taps, with at least 5 distinct points. Revisits allowed, any number, if not adjacent in the sequence.
 - Offsets after the first are encrypted with a key chained through the sequence.
 - Offsets are expressed in lattice coordinates, so their domain is a plain square.
 - Single enrolment. One record works on every device: enrol on desktop, log in on a phone, or the reverse.
@@ -91,7 +93,7 @@ By construction, point minus offset lands on a lattice point, which is a hexagon
 
 Steps:
 
-1. Check tap count is between min_distinct and min_distinct + max_revisits (default 5 to 6).
+1. Check tap count is between min_distinct and max_taps (default 5 to 8).
 2. Check every tap is inside the image.
 3. Reject if any two consecutive taps are less than 2s apart.
 4. If a tap falls inside the hexagon of an earlier distinct point, snap it to that exact point. This is a revisit.
@@ -171,7 +173,7 @@ Chosen: r = 2.2% of image width (W/r = 45), against a target of 40 theoretical b
 - Cells per image: about 440
 - Bits per point: 8.8
 - n = 5 distinct points: about 44 theoretical bits
-- With one revisit allowed: 6 taps
+- Up to 8 taps, so a user may add distinct points (about 8.8 bits each) or revisits for more strength. The record does not show which they chose, or how many.
 
 Reference table for other tolerances:
 

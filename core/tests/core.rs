@@ -294,16 +294,15 @@ fn tap_count_limits() {
         enrol(&five()[..4], "i", &p, &pepper()).unwrap_err(),
         Error::TapCount {
             min: 5,
-            max: 6,
+            max: 8,
             got: 4
         }
     );
-    let mut seven = five();
-    seven.push(Point::new(0.5, 0.1));
-    seven.push(Point::new(0.2, 0.4));
+    let mut nine = five();
+    nine.extend([0.1, 0.3, 0.5, 0.7].map(|x| Point::new(x, 0.45)));
     assert!(matches!(
-        enrol(&seven, "i", &p, &pepper()),
-        Err(Error::TapCount { got: 7, .. })
+        enrol(&nine, "i", &p, &pepper()),
+        Err(Error::TapCount { got: 9, .. })
     ));
 }
 
@@ -365,7 +364,24 @@ fn revisit_is_not_visible_in_the_record() {
 }
 
 #[test]
-fn too_many_revisits_are_rejected() {
+fn revisits_are_unlimited_within_the_tap_count() {
+    let (a, b, c) = (
+        Point::new(0.10, 0.10),
+        Point::new(0.80, 0.20),
+        Point::new(0.30, 0.60),
+    );
+    let (d, e) = (Point::new(0.55, 0.35), Point::new(0.90, 0.70));
+    // Eight taps on five distinct points, returning to A three times.
+    let taps = [a, b, a, c, a, d, e, a];
+    let enrolment = enrol(&taps, "i", &test_policy(), &pepper()).unwrap();
+    assert!(verify(&taps, &enrolment.record, &pepper()).unwrap());
+    let mut wrong = taps;
+    wrong[4] = c;
+    assert!(!verify(&wrong, &enrolment.record, &pepper()).unwrap());
+}
+
+#[test]
+fn revisits_still_need_enough_distinct_points() {
     let a = Point::new(0.10, 0.10);
     let b = Point::new(0.80, 0.20);
     // A, B, A, B, A: allowed by the consecutive rule, but only 2 distinct.
@@ -607,7 +623,7 @@ fn policy_limits_are_exact() {
     // Fewer than two distinct points is never a sequence.
     let one = Policy {
         min_distinct: 1,
-        max_revisits: 0,
+        max_taps: 1,
         ..test_policy()
     };
     assert!(matches!(
@@ -616,24 +632,45 @@ fn policy_limits_are_exact() {
     ));
     let two = Policy {
         min_distinct: 2,
-        max_revisits: 0,
+        max_taps: 2,
         ..test_policy()
     };
     assert!(enrol(&five()[..2], "i", &two, &pepper()).is_ok());
 
-    // 32 taps is the most a policy may allow.
-    let at_limit = Policy {
-        min_distinct: 31,
-        max_revisits: 1,
+    // The most taps may not be fewer than the distinct points required.
+    let inverted = Policy {
+        min_distinct: 5,
+        max_taps: 4,
         ..test_policy()
     };
     assert!(matches!(
-        enrol(&five(), "i", &at_limit, &pepper()),
-        Err(Error::TapCount { max: 32, .. })
+        enrol(&five(), "i", &inverted, &pepper()),
+        Err(Error::InvalidPolicy(_))
     ));
+    let exact = Policy {
+        min_distinct: 5,
+        max_taps: 5,
+        ..test_policy()
+    };
+    assert!(enrol(&five(), "i", &exact, &pepper()).is_ok());
+
+    // 32 taps is the most a policy may allow.
+    let at_limit = Policy {
+        min_distinct: 6,
+        max_taps: 32,
+        ..test_policy()
+    };
+    assert_eq!(
+        enrol(&five(), "i", &at_limit, &pepper()).unwrap_err(),
+        Error::TapCount {
+            min: 6,
+            max: 32,
+            got: 5
+        }
+    );
     let over_limit = Policy {
-        min_distinct: 31,
-        max_revisits: 2,
+        min_distinct: 6,
+        max_taps: 33,
         ..test_policy()
     };
     assert!(matches!(
@@ -646,7 +683,7 @@ fn policy_limits_are_exact() {
 fn a_full_length_sequence_enrols_and_verifies() {
     let policy = Policy {
         min_distinct: 32,
-        max_revisits: 0,
+        max_taps: 32,
         ..test_policy()
     };
     // 32 points on a grid, visited in an order that keeps neighbours apart.

@@ -8,7 +8,7 @@ Instead of typing a password, you tap a few points on a picture, in an order onl
 
 ![An image with a five-tap sequence and each tap's accepted hexagon, to scale](images/sequence-on-image.svg)
 
-The default is five taps, plus an optional sixth that returns to an earlier point. Each small hexagon above is how close a later tap has to be. It is drawn to scale: about 4% of the image width across, which is comfortable on a desktop and needs a pinch of zoom on a phone.
+A sequence is 5 to 8 taps on at least 5 different points. A tap may return to an earlier point as often as you like, just not straight after it, so a sequence cannot be two or three spots repeated. Each small hexagon above is how close a later tap has to be. It is drawn to scale: about 4% of the image width across, which is comfortable on a desktop and needs a pinch of zoom on a phone.
 
 Two things make this hard to do safely:
 
