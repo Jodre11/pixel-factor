@@ -11,6 +11,7 @@ Status: early and unaudited. Do not use to protect anything real yet.
 | Path | What |
 |---|---|
 | `core/` | Rust library: geometry, enrolment, verification. No I/O. |
+| `docs/` | Design spec and byte-level format notes. |
 
 Planned: an HTTP service around the core, and a Keycloak authenticator plugin.
 
