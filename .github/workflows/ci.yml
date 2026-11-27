@@ -8,14 +8,28 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     name: make check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+
+      - name: Cache tools and dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: check-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'fuzz/Cargo.lock', 'scripts/install-tools.sh') }}
 
       # rustup reads rust-toolchain.toml and installs the pinned toolchain.
       - name: Set up
@@ -32,3 +46,27 @@ jobs:
       - name: Commit conventions
         if: github.event_name == 'pull_request'
         run: scripts/check-commits.sh "origin/${{ github.base_ref }}"
+
+  coverage:
+    name: make coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Cache tools and dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: coverage-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'fuzz/Cargo.lock', 'scripts/install-tools.sh') }}
+
+      - name: Set up
+        run: |
+          make setup
+          scripts/install-tools.sh coverage
+
+      - name: Coverage
+        run: make coverage
