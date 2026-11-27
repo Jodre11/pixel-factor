@@ -2,7 +2,7 @@
 
 `pixel-factor-service` wraps the core in a small HTTP API, owns the stored records and calls the pepper through the core's `PepperProvider`. It is meant to sit on an internal network behind an identity system such as Keycloak, never on the public internet. See [spec.md](spec.md) section 16 for where it fits.
 
-Status: development build. The pepper is an in-memory key; there is no KMS integration and no deployment yet.
+Status: development build. The pepper is an in-memory key; there is no KMS integration and no deployment yet. For the container image, logs, health and alerts, see [OPERATIONS.md](OPERATIONS.md).
 
 ## Run it
 
@@ -31,6 +31,7 @@ Everything comes from the environment. Nothing is hard-coded, so several copies 
 | `PF_FAILURE_WINDOW_SECS` | no | Failures older than this are forgotten. Default 86400. Must be at least `PF_LOCKOUT_MAX_SECS`. |
 | `PF_MAX_CONCURRENT` | no | Verifications and enrolments run at once. Each uses 64 MiB for Argon2id. Default: the number of CPUs. |
 | `RUST_LOG` | no | Log filter. Default `info`. |
+| `PF_LOG_FORMAT` | no | `json` for one JSON object per line; anything else for text. The image sets `json`. |
 
 `PF_BUILD_COMMIT` is read at build time, not run time: `make serve` sets it to the current commit, and `/version` reports it.
 
@@ -61,6 +62,6 @@ All `/v1` endpoints take and return JSON and need `Authorization: Bearer <PF_API
 ## Not yet
 
 - KMS-backed `PepperProvider`, and pepper rotation.
-- Container image and deployment. Until then there is nothing live, so `/version` on a running copy is the only answer to "what version is this".
-- Metrics.
+- A published image and a deployment target. The image is built and scanned in CI but not pushed anywhere.
+- Metrics and alert definitions. [OPERATIONS.md](OPERATIONS.md) lists the signals to alert on from the logs meanwhile.
 - Per-source rate limiting, if the identity system in front does not provide it.

@@ -29,6 +29,9 @@ Everything goes through the Makefile. `make help` lists the targets.
 | `make timing` | Time one enrolment and verification at production settings. |
 | `make serve` | Run the HTTP service locally with development settings. Prints its address. |
 | `make smoke` | Start a throwaway service, drive enrol and verify over HTTP, stop it. |
+| `make image` | Build the service container image. Needs Docker. `scripts/container-smoke.sh` then runs and drives it. |
+| `make iac-scan` | Trivy misconfiguration scan of the `Dockerfile` and workflows. |
+| `make image-scan` | Trivy vulnerability scan of the built image. |
 
 The toolchain is pinned in `rust-toolchain.toml`; rustup installs it on first use. `make setup` installs everything else. The one thing it may not manage is `shellcheck` on a machine with neither Homebrew nor apt: it says so, and you install it once by hand.
 
@@ -47,7 +50,7 @@ The toolchain is pinned in `rust-toolchain.toml`; rustup installs it on first us
 | `make shellcheck` | Mistakes in the shell scripts. |
 | `make fuzz-check` | A fuzz target that no longer compiles. |
 
-Slower gates run in CI but not in `make check`: `make smoke` and `make coverage` on every pull request, and `make mutants`, `make fuzz` and `make advisories` weekly.
+Slower gates run in CI but not in `make check`: `make smoke`, `make coverage` and a container job (Trivy scans of the `Dockerfile` and image, then `scripts/container-smoke.sh`) on every pull request, and `make mutants`, `make fuzz` and `make advisories` weekly.
 
 If a gate blocks a change you believe is right, fix the code or raise it. Do not silence a lint with `#[allow]` unless the reason is written beside it, as in `core/src/geometry.rs`.
 
@@ -62,6 +65,8 @@ If a gate blocks a change you believe is right, fix the code or raise it. Do not
 | `core/tests/properties.rs` | Property tests. |
 | `service/` | HTTP service `pixel-factor-service`: axum and SQLite around the core. See `docs/service.md`. |
 | `docs/service.md` | Service configuration, API and decisions. |
+| `docs/OPERATIONS.md` | Deploying the service, its version, health, logs and alerts. |
+| `Dockerfile` | Service container image: distroless, non-root, base images pinned by digest. |
 | `fuzz/` | Fuzz target for `verify`. A workspace member that shares `Cargo.lock`, excluded from the default build and tests. |
 | `deny.toml` | Dependency policy. |
 | `core/tests/vectors/kat2.json` | Known-answer vector. Locks the record format. |
