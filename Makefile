@@ -1,14 +1,23 @@
 # Every command an agent or contributor needs. Run `make help` for the list.
 
-# Lowest line coverage `make coverage` accepts, in percent. Measured at 98.68%.
+# Lowest line coverage `make coverage` accepts, in percent, for each crate.
+# Core measured at 98.4%; service at 95.4%, without main.rs, which `make smoke`
+# exercises instead.
 COVERAGE_MIN ?= 98
+SERVICE_COVERAGE_MIN ?= 95
 # How long `make fuzz` runs, in seconds.
 FUZZ_SECONDS ?= 60
 # Parallel jobs for `make mutants`.
 MUTANTS_JOBS ?= 2
+# Settings for `make serve`. All development values: the pepper is public.
+PF_LISTEN ?= 127.0.0.1:0
+PF_DB_PATH ?= target/serve.db
+PF_API_TOKEN ?= dev-token
+PF_IMAGES ?= demo=0.75
+PF_DEV_PEPPER_HEX ?= 6465762d6f6e6c792d7065707065722d6e6f742d666f722d70726f64756374696f6e
 
 .PHONY: help setup tools-deep check check-changed fmt fmt-check lint test doc \
-	docs-check deny shellcheck fuzz-check advisories coverage mutants fuzz kat timing
+	docs-check deny shellcheck fuzz-check advisories coverage mutants fuzz kat timing serve smoke
 
 help: ## List the available commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | sort
@@ -56,8 +65,10 @@ fuzz-check: ## Compile the fuzz target, so it cannot rot
 advisories: ## Check dependencies against the RustSec advisory database (needs network)
 	cargo deny check advisories
 
-coverage: ## Line coverage, failing below COVERAGE_MIN percent
-	cargo llvm-cov --workspace --exclude pixel-factor-fuzz --locked --offline --fail-under-lines $(COVERAGE_MIN)
+coverage: ## Line coverage per crate, failing below COVERAGE_MIN (core) or SERVICE_COVERAGE_MIN
+	cargo llvm-cov --package pixel-factor-core --locked --offline --fail-under-lines $(COVERAGE_MIN)
+	cargo llvm-cov --package pixel-factor-service --locked --offline \
+		--ignore-filename-regex 'service/src/main\.rs' --fail-under-lines $(SERVICE_COVERAGE_MIN)
 
 mutants: ## Mutation testing: break the code on purpose and see if a test notices (slow)
 	cargo mutants --package pixel-factor-core --no-shuffle --jobs $(MUTANTS_JOBS) -- --locked --offline
@@ -67,6 +78,14 @@ fuzz: ## Fuzz `verify` for FUZZ_SECONDS seconds (needs a nightly toolchain)
 
 kat: ## Print the known-answer record (compare with core/tests/vectors/kat2.json)
 	@cargo run --quiet --locked -p pixel-factor-core --example kat
+
+serve: ## Run the HTTP service locally with development settings; prints its address
+	PF_LISTEN=$(PF_LISTEN) PF_DB_PATH=$(PF_DB_PATH) PF_API_TOKEN=$(PF_API_TOKEN) PF_IMAGES=$(PF_IMAGES) \
+		PF_DEV_PEPPER_HEX=$(PF_DEV_PEPPER_HEX) PF_BUILD_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null) \
+		cargo run --quiet --locked --release -p pixel-factor-service
+
+smoke: ## Start the service, drive enrol and verify through HTTP, then stop it
+	@scripts/smoke.sh
 
 timing: ## Time one enrolment and verification at production settings
 	@cargo run --quiet --locked --release -p pixel-factor-core --example timing

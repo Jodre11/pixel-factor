@@ -38,6 +38,10 @@ jobs:
       - name: Check
         run: make check
 
+      # Starts the real binary and drives it over HTTP.
+      - name: Smoke test the service
+        run: make smoke
+
       # Proves the narrower path works too, so it can be trusted locally.
       - name: Scoped check
         if: github.event_name == 'pull_request'

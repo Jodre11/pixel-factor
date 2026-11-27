@@ -1,0 +1,28 @@
+[package]
+name = "pixel-factor-service"
+version = "0.1.0"
+edition = "2021"
+description = "HTTP service for pixel-factor: enrolment, verification and record storage"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Jodre11/pixel-factor"
+publish = false
+
+[dependencies]
+pixel-factor-core = { path = "../core" }
+axum = "0.8.9"
+tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "net", "signal", "sync"] }
+rusqlite = { version = "0.43", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = "0.4"
+hmac = "0.13"
+sha2 = "0.11"
+subtle = "2"
+getrandom = "0.4"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+rusqlite = { version = "0.43", features = ["bundled"] }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

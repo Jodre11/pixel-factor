@@ -21,12 +21,14 @@ Everything goes through the Makefile. `make help` lists the targets.
 | `make check-changed` | Check only what changed. Use this while iterating. The pre-commit hook runs the staged version. |
 | `make fmt` | Format the code. |
 | `make test` | Run the tests only, including the property tests. |
-| `make coverage` | Line coverage with a floor. CI runs it. Needs `make tools-deep` once. |
+| `make coverage` | Line coverage with a floor for each crate. CI runs it. Needs `make tools-deep` once. |
 | `make mutants` | Mutation testing. Slow; CI runs it weekly. Needs `make tools-deep` once. |
 | `make fuzz` | Fuzz `verify`. CI runs it weekly. Needs `make tools-deep` once and a nightly toolchain. |
 | `make advisories` | Check dependencies for known vulnerabilities. Needs network. CI runs it weekly. |
 | `make kat` | Print the known-answer record. |
 | `make timing` | Time one enrolment and verification at production settings. |
+| `make serve` | Run the HTTP service locally with development settings. Prints its address. |
+| `make smoke` | Start a throwaway service, drive enrol and verify over HTTP, stop it. |
 
 The toolchain is pinned in `rust-toolchain.toml`; rustup installs it on first use. `make setup` installs everything else. The one thing it may not manage is `shellcheck` on a machine with neither Homebrew nor apt: it says so, and you install it once by hand.
 
@@ -45,7 +47,7 @@ The toolchain is pinned in `rust-toolchain.toml`; rustup installs it on first us
 | `make shellcheck` | Mistakes in the shell scripts. |
 | `make fuzz-check` | A fuzz target that no longer compiles. |
 
-Three slower gates run in CI but not in `make check`: `make coverage` on every pull request, and `make mutants`, `make fuzz` and `make advisories` weekly.
+Slower gates run in CI but not in `make check`: `make smoke` and `make coverage` on every pull request, and `make mutants`, `make fuzz` and `make advisories` weekly.
 
 If a gate blocks a change you believe is right, fix the code or raise it. Do not silence a lint with `#[allow]` unless the reason is written beside it, as in `core/src/geometry.rs`.
 
@@ -58,6 +60,8 @@ If a gate blocks a change you believe is right, fix the code or raise it. Do not
 | `core/src/lib.rs` | `enrol`, `verify`, `Record`, `Policy`, `PepperProvider`. |
 | `core/tests/core.rs` | Example-based tests. |
 | `core/tests/properties.rs` | Property tests. |
+| `service/` | HTTP service `pixel-factor-service`: axum and SQLite around the core. See `docs/service.md`. |
+| `docs/service.md` | Service configuration, API and decisions. |
 | `fuzz/` | Fuzz target for `verify`. A workspace member that shares `Cargo.lock`, excluded from the default build and tests. |
 | `deny.toml` | Dependency policy. |
 | `core/tests/vectors/kat2.json` | Known-answer vector. Locks the record format. |
@@ -68,7 +72,7 @@ If a gate blocks a change you believe is right, fix the code or raise it. Do not
 | `docs/FAQ.md` | Short answers to common review questions. |
 | `scripts/` | Check scripts used by the Makefile, the hook and CI. |
 
-Planned, not yet present: an HTTP service crate and a Keycloak authenticator plugin.
+Planned, not yet present: a Keycloak authenticator plugin and a tap demo page.
 
 ## Vocabulary
 
@@ -110,7 +114,7 @@ Coordinates are in units of image width, never pixels: x runs 0 to 1, y runs 0 t
 
 Safe. The core does no I/O: no ports, no files, no environment variables, no shared state. Tests build everything in memory. Each worktree gets its own `target/` directory.
 
-When the HTTP service lands, it must take its port and database path from the environment so sessions do not collide. Do not hard-code either.
+The service takes its port and database path from the environment. `make serve` binds a free port by default, and `make smoke` uses its own temporary database, so copies in several worktrees do not collide. Do not hard-code either.
 
 ## Outside dependencies
 
