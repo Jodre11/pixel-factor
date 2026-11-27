@@ -14,18 +14,33 @@ pub const SQRT3: f64 = 1.732_050_807_568_877_2;
 /// Offsets are quantised to this many steps per lattice basis vector.
 pub const OFFSET_STEPS: f64 = 65536.0;
 
+/// Smallest tolerance accepted, as a fraction of image width.
+///
+/// Below this, cell indices for a large image could exceed an `i32`.
+pub const MIN_R: f64 = 1e-4;
+
+/// Tolerance must be strictly below this fraction of image width.
+pub const MAX_R: f64 = 0.25;
+
+/// Largest image aspect ratio (height / width) accepted.
+pub const MAX_ASPECT: f64 = 16.0;
+
 /// A point on the image, in units of image width.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Point {
+    /// Horizontal position, 0 at the left edge and 1 at the right.
     pub x: f64,
+    /// Vertical position, 0 at the top and `aspect` at the bottom.
     pub y: f64,
 }
 
 impl Point {
+    /// A point at (`x`, `y`), in units of image width.
     pub fn new(x: f64, y: f64) -> Self {
         Self { x, y }
     }
 
+    /// Straight-line distance to `other`, in units of image width.
     pub fn distance(&self, other: &Point) -> f64 {
         ((self.x - other.x).powi(2) + (self.y - other.y).powi(2)).sqrt()
     }
@@ -39,11 +54,17 @@ pub struct Lattice {
 }
 
 impl Lattice {
-    /// `r` is the guaranteed tolerance (hexagon inradius), in width units.
-    pub fn new(r: f64) -> Self {
-        Self {
-            r,
-            s: 2.0 * r / SQRT3,
+    /// A lattice whose hexagons have inradius `r`, in width units.
+    ///
+    /// Returns `None` unless `r` is finite and within [`MIN_R`]..[`MAX_R`].
+    pub fn new(r: f64) -> Option<Self> {
+        if r.is_finite() && (MIN_R..MAX_R).contains(&r) {
+            Some(Self {
+                r,
+                s: 2.0 * r / SQRT3,
+            })
+        } else {
+            None
         }
     }
 
@@ -73,14 +94,10 @@ impl Lattice {
     pub fn split(&self, p: Point) -> (CellIndex, Offset) {
         let (q, t) = self.to_lattice(p);
         let (qi, ti) = (q.floor(), t.floor());
-        let quantise = |frac: f64| -> u16 {
-            let v = (frac * OFFSET_STEPS).floor();
-            v.clamp(0.0, OFFSET_STEPS - 1.0) as u16
-        };
         (
             CellIndex {
-                q: qi as i32,
-                t: ti as i32,
+                q: to_i32(qi),
+                t: to_i32(ti),
             },
             Offset {
                 u: quantise(q - qi),
@@ -99,10 +116,7 @@ impl Lattice {
             q - f64::from(offset.u) / OFFSET_STEPS,
             t - f64::from(offset.v) / OFFSET_STEPS,
         );
-        CellIndex {
-            q: a as i32,
-            t: c as i32,
-        }
+        CellIndex { q: a, t: c }
     }
 
     /// True if `tap` falls inside the hexagon centred on `centre`.
@@ -115,36 +129,54 @@ impl Lattice {
 
 /// Round fractional lattice coordinates to the nearest hexagon centre, using
 /// cube-coordinate rounding.
-pub fn hex_round(q: f64, t: f64) -> (i64, i64) {
+pub fn hex_round(q: f64, t: f64) -> (i32, i32) {
     let (a, c) = (q, t);
     let b = -a - c;
-    let (mut ra, mut rb, mut rc) = (a.round(), b.round(), c.round());
+    let (mut ra, rb, mut rc) = (a.round(), b.round(), c.round());
     let (da, db, dc) = ((ra - a).abs(), (rb - b).abs(), (rc - c).abs());
+    // Cube coordinates must sum to zero. Recompute whichever of the three
+    // moved furthest. When that is `b`, the two we return are already right.
     if da > db && da > dc {
         ra = -rb - rc;
-    } else if db > dc {
-        rb = -ra - rc;
-    } else {
+    } else if db <= dc {
         rc = -ra - rb;
     }
-    let _ = rb;
-    (ra as i64, rc as i64)
+    (to_i32(ra), to_i32(rc))
+}
+
+/// Convert an already-integral float to `i32`, saturating at the type's
+/// bounds. NaN becomes 0.
+///
+/// Callers keep values far inside the range: `Lattice::new` bounds `r` and the
+/// public API bounds the image, so saturation is a backstop, not a code path.
+#[allow(clippy::cast_possible_truncation)]
+fn to_i32(v: f64) -> i32 {
+    v.clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32
+}
+
+/// Quantise a fraction in 0..1 to 16 bits.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn quantise(frac: f64) -> u16 {
+    (frac * OFFSET_STEPS)
+        .floor()
+        .clamp(0.0, f64::from(u16::MAX)) as u16
 }
 
 /// The secret part of an enrolled point: which hexagon it is in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CellIndex {
+    /// Lattice coordinate along basis vector a1.
     pub q: i32,
+    /// Lattice coordinate along basis vector a2.
     pub t: i32,
 }
 
 impl CellIndex {
     /// Fixed-width encoding: two big-endian i32 values.
     pub fn encode(&self) -> [u8; 8] {
-        let mut out = [0u8; 8];
-        out[..4].copy_from_slice(&self.q.to_be_bytes());
-        out[4..].copy_from_slice(&self.t.to_be_bytes());
-        out
+        let [q0, q1, q2, q3] = self.q.to_be_bytes();
+        let [t0, t1, t2, t3] = self.t.to_be_bytes();
+        [q0, q1, q2, q3, t0, t1, t2, t3]
     }
 }
 
@@ -152,22 +184,26 @@ impl CellIndex {
 /// cell. Reveals nothing about which cell.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Offset {
+    /// Position along basis vector a1, in 1/65536ths of a cell.
     pub u: u16,
+    /// Position along basis vector a2, in 1/65536ths of a cell.
     pub v: u16,
 }
 
 impl Offset {
+    /// Fixed-width encoding: two big-endian u16 values.
     pub fn to_bytes(self) -> [u8; 4] {
-        let mut out = [0u8; 4];
-        out[..2].copy_from_slice(&self.u.to_be_bytes());
-        out[2..].copy_from_slice(&self.v.to_be_bytes());
-        out
+        let [u0, u1] = self.u.to_be_bytes();
+        let [v0, v1] = self.v.to_be_bytes();
+        [u0, u1, v0, v1]
     }
 
+    /// Inverse of [`Offset::to_bytes`]. Every input is a valid offset.
     pub fn from_bytes(b: [u8; 4]) -> Self {
+        let [u0, u1, v0, v1] = b;
         Self {
-            u: u16::from_be_bytes([b[0], b[1]]),
-            v: u16::from_be_bytes([b[2], b[3]]),
+            u: u16::from_be_bytes([u0, u1]),
+            v: u16::from_be_bytes([v0, v1]),
         }
     }
 }

@@ -19,6 +19,17 @@ An earlier draft stored offsets as positions inside a hexagon. That needed forma
 
 Coordinates are in units of image width. x runs 0 to 1, y runs 0 to aspect (height / width). Inputs are f64.
 
+## Input limits
+
+Enforced at enrolment (`InvalidPolicy`, `InvalidImageId`) and again when a record is read (`InvalidRecord`):
+
+| Input | Limit | Why |
+|---|---|---|
+| r | 0.0001 up to, but not including, 0.25 | Below the minimum, cell indices could exceed an i32. |
+| aspect | above 0, at most 16 | Bounds the cell index range. |
+| image id | 1 to 255 bytes | Its length is part of the context. |
+| taps | at most 32 | The index count is one byte. |
+
 ## Byte formats
 
 All integers big-endian.

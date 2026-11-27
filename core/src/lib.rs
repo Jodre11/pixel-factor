@@ -19,10 +19,25 @@
 //! This crate does no I/O. Rate limiting, lockout, and record storage belong
 //! to the caller.
 
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::dbg_macro
+)]
+
 pub mod geometry;
 
 use argon2::{Algorithm, Argon2, Params, Version};
-use geometry::{CellIndex, Lattice, Offset, Point};
+use geometry::{CellIndex, Lattice, Offset, Point, MAX_ASPECT};
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -33,6 +48,12 @@ type HmacSha256 = Hmac<Sha256>;
 /// Format version written into every record.
 pub const RECORD_VERSION: u8 = 1;
 
+/// Most taps a sequence may have. The index count is stored in one byte.
+pub const MAX_TAPS: usize = 32;
+
+/// Longest image id accepted, in bytes.
+pub const MAX_IMAGE_ID_LEN: usize = 255;
+
 const DOMAIN_OFFSET: &[u8] = b"pfv1/offset";
 const DOMAIN_KDF: &[u8] = b"pfv1/kdf";
 const DOMAIN_FINAL: &[u8] = b"pfv1/final";
@@ -42,14 +63,34 @@ const DOMAIN_FINAL: &[u8] = b"pfv1/final";
 pub enum Error {
     /// Policy values are out of range.
     InvalidPolicy(&'static str),
+    /// The image id is empty or longer than [`MAX_IMAGE_ID_LEN`].
+    InvalidImageId,
     /// A tap is not a finite coordinate inside the image.
-    PointOutOfBounds { tap: usize },
+    PointOutOfBounds {
+        /// Zero-based position of the tap in the sequence.
+        tap: usize,
+    },
     /// Wrong number of taps for the policy.
-    TapCount { min: usize, max: usize, got: usize },
+    TapCount {
+        /// Fewest taps the policy allows.
+        min: usize,
+        /// Most taps the policy allows.
+        max: usize,
+        /// Number of taps supplied.
+        got: usize,
+    },
     /// Two consecutive taps are less than two circumradii apart.
-    ConsecutiveTooClose { tap: usize },
+    ConsecutiveTooClose {
+        /// Zero-based position of the second tap of the pair.
+        tap: usize,
+    },
     /// Not enough distinct points in the sequence.
-    TooFewDistinct { required: usize, got: usize },
+    TooFewDistinct {
+        /// Distinct points the policy requires.
+        required: usize,
+        /// Distinct points supplied.
+        got: usize,
+    },
     /// The record is malformed.
     InvalidRecord(&'static str),
     /// Argon2 rejected its parameters or failed.
@@ -82,6 +123,7 @@ pub struct StaticPepper {
 }
 
 impl StaticPepper {
+    /// A pepper with the given version number and key bytes.
     pub fn new(version: u32, key: impl Into<Vec<u8>>) -> Self {
         Self {
             version,
@@ -139,6 +181,7 @@ pub struct Policy {
     pub min_distinct: usize,
     /// How many taps may revisit an earlier point.
     pub max_revisits: usize,
+    /// Argon2id cost for the verifier.
     pub kdf: KdfParams,
 }
 
@@ -155,16 +198,16 @@ impl Policy {
     }
 
     fn validate(&self) -> Result<(), Error> {
-        if !(self.r.is_finite() && self.r > 0.0 && self.r < 0.25) {
-            return Err(Error::InvalidPolicy("r must be in (0, 0.25)"));
+        if Lattice::new(self.r).is_none() {
+            return Err(Error::InvalidPolicy("r must be in [0.0001, 0.25)"));
         }
-        if !(self.aspect.is_finite() && self.aspect > 0.0) {
-            return Err(Error::InvalidPolicy("aspect must be positive"));
+        if !valid_aspect(self.aspect) {
+            return Err(Error::InvalidPolicy("aspect must be in (0, 16]"));
         }
         if self.min_distinct < 2 {
             return Err(Error::InvalidPolicy("min_distinct must be at least 2"));
         }
-        if self.min_distinct + self.max_revisits > 32 {
+        if self.min_distinct.saturating_add(self.max_revisits) > MAX_TAPS {
             return Err(Error::InvalidPolicy("at most 32 taps"));
         }
         Ok(())
@@ -175,12 +218,19 @@ impl Policy {
 /// pepper it cannot be checked against guesses.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Record {
+    /// Record format version. See [`RECORD_VERSION`].
     pub version: u8,
+    /// Which image the sequence was enrolled on.
     pub image_id: String,
+    /// Guaranteed tolerance, as a fraction of image width.
     pub r: f64,
+    /// Image height divided by width.
     pub aspect: f64,
+    /// Argon2id cost used for the verifier.
     pub kdf: KdfParams,
+    /// Which pepper the record was written with.
     pub pepper_version: u32,
+    /// Random per-record salt.
     #[serde(with = "hex")]
     pub salt: [u8; 16],
     /// Offset of the first tap, in the clear.
@@ -189,6 +239,7 @@ pub struct Record {
     /// Encrypted offsets of taps 2..n, four bytes each.
     #[serde(with = "hex")]
     pub enc_offsets: Vec<u8>,
+    /// The one hash covering the whole ordered sequence.
     #[serde(with = "hex")]
     pub verifier: [u8; 32],
 }
@@ -196,7 +247,7 @@ pub struct Record {
 impl Record {
     /// Number of taps in the enrolled sequence.
     pub fn tap_count(&self) -> usize {
-        1 + self.enc_offsets.len() / 4
+        (self.enc_offsets.len() / 4).saturating_add(1)
     }
 
     /// Bytes that bind the keys and verifier to this record's parameters, so
@@ -210,13 +261,20 @@ impl Record {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Warning {
     /// Two distinct points are closer than 4r. Valid, but fiddly on a phone.
-    PointsClose { first: usize, second: usize },
+    PointsClose {
+        /// Zero-based position of the earlier tap.
+        first: usize,
+        /// Zero-based position of the later tap.
+        second: usize,
+    },
 }
 
 /// Result of a successful enrolment.
 #[derive(Clone, Debug)]
 pub struct Enrolment {
+    /// What to store for the user.
     pub record: Record,
+    /// Things worth telling the user. Enrolment still succeeded.
     pub warnings: Vec<Warning>,
 }
 
@@ -242,11 +300,14 @@ pub fn enrol_with_salt(
     salt: [u8; 16],
 ) -> Result<Enrolment, Error> {
     policy.validate()?;
-    let lattice = Lattice::new(policy.r);
+    if !valid_image_id(image_id) {
+        return Err(Error::InvalidImageId);
+    }
+    let lattice = Lattice::new(policy.r).ok_or(Error::InvalidPolicy("r out of range"))?;
 
     let (min, max) = (
         policy.min_distinct,
-        policy.min_distinct + policy.max_revisits,
+        policy.min_distinct.saturating_add(policy.max_revisits),
     );
     if taps.len() < min || taps.len() > max {
         return Err(Error::TapCount {
@@ -255,32 +316,45 @@ pub fn enrol_with_salt(
             got: taps.len(),
         });
     }
-    for (i, p) in taps.iter().enumerate() {
-        if !in_bounds(p, policy.aspect) {
-            return Err(Error::PointOutOfBounds { tap: i });
-        }
+    if let Some(i) = taps.iter().position(|p| !in_bounds(p, policy.aspect)) {
+        return Err(Error::PointOutOfBounds { tap: i });
     }
 
-    // Snap revisits to the earlier point, and track which taps are distinct.
+    // Snap revisits to the earlier point. `fresh` marks the taps that
+    // introduced a new point.
     let mut points: Vec<Point> = Vec::with_capacity(taps.len());
-    let mut first_seen: Vec<usize> = Vec::with_capacity(taps.len());
+    let mut fresh: Vec<bool> = Vec::with_capacity(taps.len());
     for (i, tap) in taps.iter().enumerate() {
-        if i > 0 && tap.distance(&points[i - 1]) < 2.0 * lattice.circumradius() {
-            return Err(Error::ConsecutiveTooClose { tap: i });
+        if let Some(previous) = points.last() {
+            if tap.distance(previous) < 2.0 * lattice.circumradius() {
+                return Err(Error::ConsecutiveTooClose { tap: i });
+            }
         }
-        match (0..i).find(|&j| first_seen[j] == j && lattice.within_tolerance(points[j], *tap)) {
-            Some(j) => {
-                points.push(points[j]);
-                first_seen.push(j);
+        let revisited = points
+            .iter()
+            .zip(&fresh)
+            .find(|(p, is_fresh)| **is_fresh && lattice.within_tolerance(**p, *tap))
+            .map(|(p, _)| *p);
+        match revisited {
+            Some(p) => {
+                points.push(p);
+                fresh.push(false);
             }
             None => {
                 points.push(*tap);
-                first_seen.push(i);
+                fresh.push(true);
             }
         }
     }
 
-    let distinct: Vec<usize> = (0..points.len()).filter(|&i| first_seen[i] == i).collect();
+    let distinct: Vec<(usize, Point)> = points
+        .iter()
+        .copied()
+        .enumerate()
+        .zip(&fresh)
+        .filter(|(_, is_fresh)| **is_fresh)
+        .map(|(indexed, _)| indexed)
+        .collect();
     if distinct.len() < policy.min_distinct {
         return Err(Error::TooFewDistinct {
             required: policy.min_distinct,
@@ -289,12 +363,12 @@ pub fn enrol_with_salt(
     }
 
     let mut warnings = Vec::new();
-    for (n, &i) in distinct.iter().enumerate() {
-        for &j in &distinct[n + 1..] {
-            if points[i].distance(&points[j]) < 4.0 * policy.r {
+    for (n, (i, a)) in distinct.iter().enumerate() {
+        for (j, b) in distinct.iter().skip(n.saturating_add(1)) {
+            if a.distance(b) < 4.0 * policy.r {
                 warnings.push(Warning::PointsClose {
-                    first: i,
-                    second: j,
+                    first: *i,
+                    second: *j,
                 });
             }
         }
@@ -304,10 +378,10 @@ pub fn enrol_with_salt(
     let ctx = context(image_id, policy.r, policy.aspect);
     let mut indices: Vec<CellIndex> = Vec::with_capacity(points.len());
     let mut first_offset = [0u8; 4];
-    let mut enc_offsets = Vec::with_capacity(4 * (points.len() - 1));
-    for (i, p) in points.iter().enumerate() {
+    let mut enc_offsets = Vec::with_capacity(points.len().saturating_mul(4));
+    for p in &points {
         let (index, offset) = lattice.split(*p);
-        if i == 0 {
+        if indices.is_empty() {
             first_offset = offset.to_bytes();
         } else {
             let ks = offset_keystream(pepper, pepper_version, &salt, &ctx, &indices)?;
@@ -347,24 +421,30 @@ pub fn verify(taps: &[Point], record: &Record, pepper: &dyn PepperProvider) -> R
     if !record.enc_offsets.len().is_multiple_of(4) {
         return Err(Error::InvalidRecord("enc_offsets length"));
     }
-    if !(record.r.is_finite() && record.r > 0.0 && record.aspect.is_finite()) {
-        return Err(Error::InvalidRecord("geometry"));
+    if record.tap_count() > MAX_TAPS {
+        return Err(Error::InvalidRecord("too many taps"));
     }
+    if !valid_aspect(record.aspect) || !valid_image_id(&record.image_id) {
+        return Err(Error::InvalidRecord("geometry or image id"));
+    }
+    let lattice = Lattice::new(record.r).ok_or(Error::InvalidRecord("r out of range"))?;
+
     if taps.len() != record.tap_count() || taps.iter().any(|p| !in_bounds(p, record.aspect)) {
         return Ok(false);
     }
 
-    let lattice = Lattice::new(record.r);
     let ctx = record.context();
+    let mut encrypted = record.enc_offsets.chunks_exact(4);
     let mut indices: Vec<CellIndex> = Vec::with_capacity(taps.len());
-    for (i, tap) in taps.iter().enumerate() {
-        let offset = if i == 0 {
+    for tap in taps {
+        let offset = if indices.is_empty() {
             Offset::from_bytes(record.first_offset)
         } else {
             let ks = offset_keystream(pepper, record.pepper_version, &record.salt, &ctx, &indices)?;
-            let start = 4 * (i - 1);
-            let mut enc = [0u8; 4];
-            enc.copy_from_slice(&record.enc_offsets[start..start + 4]);
+            let enc: [u8; 4] = encrypted
+                .next()
+                .and_then(|chunk| chunk.try_into().ok())
+                .ok_or(Error::InvalidRecord("enc_offsets length"))?;
             // No integrity check on purpose: a wrong key must give a
             // plausible offset, never an error, or taps become checkable
             // one at a time.
@@ -384,23 +464,35 @@ pub fn verify(taps: &[Point], record: &Record, pepper: &dyn PepperProvider) -> R
     Ok(candidate.ct_eq(&record.verifier).into())
 }
 
+fn valid_aspect(aspect: f64) -> bool {
+    aspect.is_finite() && aspect > 0.0 && aspect <= MAX_ASPECT
+}
+
+fn valid_image_id(image_id: &str) -> bool {
+    !image_id.is_empty() && image_id.len() <= MAX_IMAGE_ID_LEN
+}
+
 fn in_bounds(p: &Point, aspect: f64) -> bool {
     p.x.is_finite() && p.y.is_finite() && p.x >= 0.0 && p.x <= 1.0 && p.y >= 0.0 && p.y <= aspect
 }
 
+/// Length-prefixed image id, then the bit patterns of r and aspect. Callers
+/// cap the id at [`MAX_IMAGE_ID_LEN`], so the length always fits.
 fn context(image_id: &str, r: f64, aspect: f64) -> Vec<u8> {
     let id = image_id.as_bytes();
-    let mut out = Vec::with_capacity(4 + id.len() + 16);
-    out.extend_from_slice(&(id.len() as u32).to_be_bytes());
+    let mut out = Vec::with_capacity(id.len().saturating_add(20));
+    out.extend_from_slice(&u32::try_from(id.len()).unwrap_or(u32::MAX).to_be_bytes());
     out.extend_from_slice(id);
     out.extend_from_slice(&r.to_bits().to_be_bytes());
     out.extend_from_slice(&aspect.to_bits().to_be_bytes());
     out
 }
 
+/// A count byte, then each index. Callers cap the count at [`MAX_TAPS`], so
+/// it always fits.
 fn encode_indices(indices: &[CellIndex]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(1 + 8 * indices.len());
-    out.push(indices.len() as u8);
+    let mut out = Vec::with_capacity(indices.len().saturating_mul(8).saturating_add(1));
+    out.push(u8::try_from(indices.len()).unwrap_or(u8::MAX));
     for i in indices {
         out.extend_from_slice(&i.encode());
     }
@@ -408,7 +500,9 @@ fn encode_indices(indices: &[CellIndex]) -> Vec<u8> {
 }
 
 fn xor4(a: [u8; 4], b: [u8; 4]) -> [u8; 4] {
-    [a[0] ^ b[0], a[1] ^ b[1], a[2] ^ b[2], a[3] ^ b[3]]
+    let [a0, a1, a2, a3] = a;
+    let [b0, b1, b2, b3] = b;
+    [a0 ^ b0, a1 ^ b1, a2 ^ b2, a3 ^ b3]
 }
 
 /// Keystream for the offset of the tap that follows `earlier`. The count of
@@ -420,14 +514,14 @@ fn offset_keystream(
     ctx: &[u8],
     earlier: &[CellIndex],
 ) -> Result<[u8; 4], Error> {
-    let mut msg = Vec::with_capacity(DOMAIN_OFFSET.len() + 17 + ctx.len() + 1 + 8 * earlier.len());
+    let mut msg = Vec::new();
     msg.extend_from_slice(DOMAIN_OFFSET);
     msg.push(0);
     msg.extend_from_slice(salt);
     msg.extend_from_slice(ctx);
     msg.extend_from_slice(&encode_indices(earlier));
-    let mac = pepper.hmac(pepper_version, &msg)?;
-    Ok([mac[0], mac[1], mac[2], mac[3]])
+    let [k0, k1, k2, k3, ..] = pepper.hmac(pepper_version, &msg)?;
+    Ok([k0, k1, k2, k3])
 }
 
 fn compute_verifier(
@@ -438,7 +532,7 @@ fn compute_verifier(
     kdf: &KdfParams,
     indices: &[CellIndex],
 ) -> Result<[u8; 32], Error> {
-    let mut password = Vec::with_capacity(DOMAIN_KDF.len() + 1 + ctx.len() + 1 + 8 * indices.len());
+    let mut password = Vec::new();
     password.extend_from_slice(DOMAIN_KDF);
     password.push(0);
     password.extend_from_slice(ctx);
@@ -451,7 +545,7 @@ fn compute_verifier(
         .hash_password_into(&password, salt, &mut stretched)
         .map_err(|e| Error::Kdf(e.to_string()))?;
 
-    let mut msg = Vec::with_capacity(DOMAIN_FINAL.len() + 1 + 32);
+    let mut msg = Vec::new();
     msg.extend_from_slice(DOMAIN_FINAL);
     msg.push(0);
     msg.extend_from_slice(&stretched);
