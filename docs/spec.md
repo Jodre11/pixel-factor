@@ -1,6 +1,8 @@
-# Pixel Based Factor Verification: Spec v0.8
+# Pixel Based Factor Verification: Spec v0.9
 
 Status: draft, 2026-11-27. Core library built (v0.1, unaudited).
+
+Changes in v0.9: the possession factor (passkey or TOTP) comes before the tap step, not after it, so only its holder can record a failed attempt and a stranger cannot use the lockout to keep a user out. A password is never the first step: password and taps are both knowledge factors.
 
 Changes in v0.8: sequences may be 5 to 8 taps. Revisits are no longer limited to one; any number is allowed within the tap count, provided there are at least 5 distinct points and no tap repeats the point just before it. The record format is unchanged.
 
@@ -241,7 +243,7 @@ Record store     KMS (pepper HMAC)
 - Rust core library: geometry, chained offsets, Argon2id, verifier. No I/O.
 - Rust HTTP service: wraps the core, owns the records, calls the KMS through the core's PepperProvider interface (in-memory key in dev, KMS in prod).
 - Adapters speak HTTP to the service. No FFI bindings needed for the MVP.
-- The Keycloak plugin renders the tap page and calls the service. It contains no crypto. It replaces the password form, with passkey or TOTP after it.
+- The Keycloak plugin renders the tap page and calls the service. It contains no crypto. It replaces the password form. A passkey or TOTP comes first and the tap step second, so only someone holding the possession factor can record a failed attempt, and a stranger cannot use the lockout to keep a user out.
 
 Rejected for now: loading Rust into Keycloak's JVM (JNI or a Java WASM runtime). It complicates deployment.
 
@@ -249,7 +251,7 @@ Rejected for now: loading Rust into Keycloak's JVM (JNI or a Java WASM runtime).
 
 1. Rust core library, with test vectors. DONE: `pixel-factor-core` v0.1. Example, property and known-answer tests, fuzzing and mutation testing. Unaudited.
 2. Rust HTTP service. DONE: `pixel-factor-service`, axum and SQLite, with lockout and a container image. See `service.md`.
-3. Keycloak authenticator plugin: first working demo, Keycloak in Docker. Next. The tap step runs only after another factor, so a stranger cannot use the lockout to keep a user out.
+3. Keycloak authenticator plugin: first working demo, Keycloak in Docker. Next. The tap step runs only after the possession factor (section 16).
 4. OIDC host reusing the same service, for Entra ID external MFA and Okta's IdP authenticator, subject to how each classifies the factor type.
 
 Test early: enrol on desktop, log in on a phone.

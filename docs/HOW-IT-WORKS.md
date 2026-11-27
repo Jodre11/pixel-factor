@@ -96,7 +96,7 @@ The pepper stops offline guessing. Online guessing, by trying taps at the real s
 - Unknown usernames are counted and answered exactly like real ones, so an attacker cannot use the lockout or the timing to learn which accounts exist.
 - Throttling a single noisy source (one address making many requests) belongs in Keycloak and at the network edge, which see the user's address. The service only sees Keycloak.
 
-A lockout can also be abused to keep someone *out*: anyone who knows a username could send one wrong attempt an hour. That is why the tap step must come after another factor, such as a password or passkey. A stranger who has not passed that factor cannot reach the tap step at all. See [THREAT-MODEL.md](THREAT-MODEL.md).
+A lockout can also be abused to keep someone *out*: anyone who knows a username could send one wrong attempt an hour. That is why the tap step comes second, after a possession factor such as a passkey or a phone code. A stranger who has not passed that factor cannot reach the tap step at all. It must not be a password: a password and taps are both things you know, so together they are not two-factor sign-in. See [THREAT-MODEL.md](THREAT-MODEL.md).
 
 ## How the pieces fit
 
@@ -108,7 +108,7 @@ sequenceDiagram
     participant DB as SQLite
     participant KMS as KMS (pepper)
 
-    U->>K: First factor (password or passkey)
+    U->>K: Passkey or phone code
     K-->>U: Tap page with the user's image
     U->>K: Taps, in fractions of the image width
     K->>S: POST /v1/verify (user, taps)
