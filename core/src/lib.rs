@@ -38,7 +38,7 @@ pub mod geometry;
 
 use argon2::{Algorithm, Argon2, Params, Version};
 use geometry::{CellIndex, Lattice, Offset, Point, MAX_ASPECT};
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
@@ -286,7 +286,7 @@ pub fn enrol(
     pepper: &dyn PepperProvider,
 ) -> Result<Enrolment, Error> {
     let mut salt = [0u8; 16];
-    getrandom::getrandom(&mut salt).map_err(|e| Error::Kdf(e.to_string()))?;
+    getrandom::fill(&mut salt).map_err(|e| Error::Kdf(e.to_string()))?;
     enrol_with_salt(taps, image_id, policy, pepper, salt)
 }
 
