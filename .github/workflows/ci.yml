@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: make check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # rustup reads rust-toolchain.toml and installs the pinned toolchain.
+      - name: Set up
+        run: make setup
+
+      - name: Check
+        run: make check
+
+      # Proves the narrower path works too, so it can be trusted locally.
+      - name: Scoped check
+        if: github.event_name == 'pull_request'
+        run: scripts/check-changed.sh "origin/${{ github.base_ref }}"
+
+      - name: Commit conventions
+        if: github.event_name == 'pull_request'
+        run: scripts/check-commits.sh "origin/${{ github.base_ref }}"
