@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "make -C \"$CLAUDE_PROJECT_DIR\" setup",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}
