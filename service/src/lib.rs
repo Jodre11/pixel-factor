@@ -96,6 +96,7 @@ pub struct App {
     token_mac: [u8; 32],
     lockout: Lockout,
     kdf: KdfParams,
+    max_taps: usize,
     work: Semaphore,
 }
 
@@ -108,7 +109,15 @@ impl App {
         getrandom::fill(&mut token_key).map_err(|e| format!("random key: {e}"))?;
         let token_mac = token_mac(&token_key, &config.api_token).ok_or("token key rejected")?;
         let mut decoys = BTreeMap::new();
+        let mut max_taps = None;
         for (id, aspect) in &config.images {
+            // Clients pad every submission to max_taps, so it must be one value
+            // for every image or the padded length would reveal the image.
+            let limit = policy(*aspect, kdf).max_taps;
+            if max_taps.is_some_and(|m| m != limit) {
+                return Err(format!("image '{id}' has a different tap limit"));
+            }
+            max_taps = Some(limit);
             let record = enrol(&decoy_taps(*aspect), id, &policy(*aspect, kdf), &pepper)
                 .map_err(|e| format!("decoy record for image '{id}': {e}"))?
                 .record;
@@ -123,8 +132,22 @@ impl App {
             token_mac,
             lockout: config.lockout,
             kdf,
+            max_taps: max_taps.ok_or("no images configured")?,
             work: Semaphore::new(config.max_concurrent),
         })
+    }
+
+    /// Run one full verification against the decoy for `user_id`'s image and
+    /// discard the result, so a path with no record costs the same as one with.
+    fn verify_decoy(&self, user_id: &str, taps: &[Point]) -> Result<(), ApiError> {
+        let image = self.decoy_image(user_id)?;
+        let decoy = self
+            .decoys
+            .get(image)
+            .ok_or_else(|| ApiError::Internal("missing decoy".to_owned()))?;
+        // The decoy's taps are public, so its result must never count.
+        let _ = verify(taps, decoy, self.pepper.as_ref())?;
+        Ok(())
     }
 
     /// The image an unknown user is shown: stable for the id, unpredictable
@@ -238,12 +261,6 @@ struct ChallengeAnswer {
     max_taps: usize,
 }
 
-/// The most taps the policy accepts. The same for every image and user, so a
-/// client can pad every submission to it.
-fn max_taps() -> usize {
-    Policy::standard(1.0).max_taps
-}
-
 async fn challenge(
     State(app): State<Arc<App>>,
     Json(req): Json<ChallengeRequest>,
@@ -261,7 +278,7 @@ async fn challenge(
     .await?;
     Ok(Json(ChallengeAnswer {
         image_id,
-        max_taps: max_taps(),
+        max_taps: app.max_taps,
     }))
 }
 
@@ -332,6 +349,8 @@ async fn enrol_into(
             Target::Pending => {
                 let now = unix_now();
                 store.put_pending(&req.user_id, &enrolment.record, now)?;
+                // Staging is the only way rows are added, so pruning here
+                // bounds the table without a background task.
                 store.prune_pending(now, PENDING_TTL_SECS)?;
                 tracing::info!(user_id = ?req.user_id, image_id = ?req.image_id, "enrolment staged");
             }
@@ -384,24 +403,25 @@ async fn confirm_enrolment(
 fn confirm_blocking(app: &App, user_id: &str, taps: &[Point]) -> Result<bool, ApiError> {
     let claimed = lock(&app.store)?.claim_pending(user_id, unix_now(), PENDING_TTL_SECS)?;
     let Some((record, claim)) = claimed else {
-        let image = app.decoy_image(user_id)?;
-        let decoy = app
-            .decoys
-            .get(image)
-            .ok_or_else(|| ApiError::Internal("missing decoy".to_owned()))?;
-        // The decoy's taps are public, so its result must never count.
-        let _ = verify(taps, decoy, app.pepper.as_ref())?;
+        app.verify_decoy(user_id, taps)?;
         tracing::info!(user_id = ?user_id, outcome = "none_pending", "enrolment confirmation");
         return Ok(false);
     };
-    let matched = verify(taps, &record, app.pepper.as_ref())?;
+    let matched = match verify(taps, &record, app.pepper.as_ref()) {
+        Ok(matched) => matched,
+        Err(e) => {
+            // A pepper failure says nothing about the taps: give the attempt back.
+            lock(&app.store)?.release_pending(user_id, &claim)?;
+            return Err(e.into());
+        }
+    };
     let store = lock(&app.store)?;
-    let current = store.finish_pending(user_id, &claim)?;
+    let claim_still_held = store.remove_claimed_pending(user_id, &claim)?;
     if !matched {
         tracing::info!(user_id = ?user_id, outcome = "no_match", "enrolment confirmation");
         return Ok(false);
     }
-    if !current {
+    if !claim_still_held {
         tracing::info!(user_id = ?user_id, outcome = "superseded", "enrolment confirmation");
         return Ok(false);
     }
@@ -478,13 +498,7 @@ fn verify_blocking(app: &App, user_id: &str, taps: &[Point]) -> Result<VerifyAns
     let matched = match &record {
         Some(record) => verify(taps, record, app.pepper.as_ref())?,
         None => {
-            let image = app.decoy_image(user_id)?;
-            let decoy = app
-                .decoys
-                .get(image)
-                .ok_or_else(|| ApiError::Internal("missing decoy".to_owned()))?;
-            // The decoy's taps are public, so its result must never count.
-            let _ = verify(taps, decoy, app.pepper.as_ref())?;
+            app.verify_decoy(user_id, taps)?;
             false
         }
     };

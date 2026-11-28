@@ -140,7 +140,7 @@ impl Store {
 
     /// Claim the pending enrolment for one confirmation attempt, if one was
     /// stored within the last `ttl_secs` and is not already claimed. Returns
-    /// the record and a claim to pass to [`Store::finish_pending`]. Atomic, so
+    /// the record and a claim to pass to [`Store::remove_claimed_pending`] or [`Store::release_pending`]. Atomic, so
     /// of several concurrent callers only one gets it.
     pub fn claim_pending(
         &self,
@@ -162,16 +162,26 @@ impl Store {
             .transpose()
     }
 
-    /// End a claim: remove the pending enrolment it was made on. Returns false
-    /// when that enrolment is already gone, because the user was deleted or
-    /// enrolment was staged again since the claim. The caller must then not
+    /// End a claim by removing the pending enrolment it was made on. Returns
+    /// false when that enrolment is already gone, because the user was deleted
+    /// or enrolment was staged again since the claim: the caller must then not
     /// make it live.
-    pub fn finish_pending(&self, user_id: &str, claim: &str) -> Result<bool, StoreError> {
+    pub fn remove_claimed_pending(&self, user_id: &str, claim: &str) -> Result<bool, StoreError> {
         let removed = self.conn.execute(
             "DELETE FROM pending WHERE user_id = ?1 AND nonce = ?2",
             params![user_id, claim],
         )?;
         Ok(removed > 0)
+    }
+
+    /// Give a claim back unused, so the enrolment can be confirmed again. For
+    /// when checking the taps failed for a reason that is not the taps.
+    pub fn release_pending(&self, user_id: &str, claim: &str) -> Result<(), StoreError> {
+        self.conn.execute(
+            "UPDATE pending SET claimed = 0 WHERE user_id = ?1 AND nonce = ?2",
+            params![user_id, claim],
+        )?;
+        Ok(())
     }
 
     /// Drop pending enrolments older than `ttl_secs`.
