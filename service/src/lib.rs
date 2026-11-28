@@ -356,9 +356,9 @@ pub struct ConfirmAnswer {
     pub confirmed: bool,
 }
 
-/// The pending enrolment is taken out of the store before its taps are
-/// checked, so it gets exactly one confirmation attempt, even under
-/// concurrent requests. A wrong one leaves nothing to guess against.
+/// The pending enrolment is claimed before its taps are checked, so it gets
+/// exactly one confirmation attempt, even under concurrent requests. A wrong
+/// one leaves nothing to guess against.
 async fn confirm_enrolment(
     State(app): State<Arc<App>>,
     Json(req): Json<ConfirmRequest>,
@@ -370,22 +370,44 @@ async fn confirm_enrolment(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
     let app2 = app.clone();
-    let confirmed = blocking(move || {
-        let pending = lock(&app2.store)?.take_pending(&req.user_id, unix_now(), PENDING_TTL_SECS)?;
-        let Some(record) = pending else {
-            tracing::info!(user_id = ?req.user_id, outcome = "none_pending", "enrolment confirmation");
-            return Ok(false);
-        };
-        if !verify(&points(&req.taps), &record, app2.pepper.as_ref())? {
-            tracing::info!(user_id = ?req.user_id, outcome = "no_match", "enrolment confirmation");
-            return Ok(false);
-        }
-        lock(&app2.store)?.put(&req.user_id, &record)?;
-        tracing::info!(user_id = ?req.user_id, image_id = ?record.image_id, outcome = "confirmed", "enrolled");
-        Ok(true)
-    })
-    .await?;
+    let confirmed =
+        blocking(move || confirm_blocking(&app2, &req.user_id, &points(&req.taps))).await?;
     Ok(Json(ConfirmAnswer { confirmed }))
+}
+
+/// Every path runs one full verification, against the pending enrolment or a
+/// decoy, so the time taken does not show whether anything was pending.
+///
+/// The store is unlocked while the taps are checked. Finishing the claim and
+/// making the record live then happen under one lock, so a deletion or a new
+/// staged enrolment in between wins and is never overwritten.
+fn confirm_blocking(app: &App, user_id: &str, taps: &[Point]) -> Result<bool, ApiError> {
+    let claimed = lock(&app.store)?.claim_pending(user_id, unix_now(), PENDING_TTL_SECS)?;
+    let Some((record, claim)) = claimed else {
+        let image = app.decoy_image(user_id)?;
+        let decoy = app
+            .decoys
+            .get(image)
+            .ok_or_else(|| ApiError::Internal("missing decoy".to_owned()))?;
+        // The decoy's taps are public, so its result must never count.
+        let _ = verify(taps, decoy, app.pepper.as_ref())?;
+        tracing::info!(user_id = ?user_id, outcome = "none_pending", "enrolment confirmation");
+        return Ok(false);
+    };
+    let matched = verify(taps, &record, app.pepper.as_ref())?;
+    let store = lock(&app.store)?;
+    let current = store.finish_pending(user_id, &claim)?;
+    if !matched {
+        tracing::info!(user_id = ?user_id, outcome = "no_match", "enrolment confirmation");
+        return Ok(false);
+    }
+    if !current {
+        tracing::info!(user_id = ?user_id, outcome = "superseded", "enrolment confirmation");
+        return Ok(false);
+    }
+    store.put(user_id, &record)?;
+    tracing::info!(user_id = ?user_id, image_id = ?record.image_id, outcome = "confirmed", "enrolled");
+    Ok(true)
 }
 
 fn describe(warning: &Warning) -> String {

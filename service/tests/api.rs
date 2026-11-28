@@ -854,32 +854,57 @@ async fn concurrent_confirmations_get_one_attempt_between_them() {
 }
 
 #[test]
-fn pending_enrolments_expire_and_are_pruned() {
+fn pending_enrolments_are_claimed_once_expire_and_are_pruned() {
     let record = record();
     let store = Store::open_in_memory().unwrap();
     store.put_pending("a", &record, 100).unwrap();
-    assert_eq!(
-        store.take_pending("a", 150, 50).unwrap(),
-        Some(record.clone()),
-        "exactly at the expiry edge it is still taken"
+    let (got, claim) = store
+        .claim_pending("a", 150, 50)
+        .unwrap()
+        .expect("exactly at the expiry edge it can still be claimed");
+    assert_eq!(got, record);
+    assert!(
+        store.claim_pending("a", 150, 50).unwrap().is_none(),
+        "claimed once"
     );
-    assert_eq!(
-        store.take_pending("a", 150, 50).unwrap(),
-        None,
-        "taken once"
-    );
+    assert!(store.finish_pending("a", &claim).unwrap());
+    assert!(!store.finish_pending("a", &claim).unwrap(), "finished once");
 
     store.put_pending("b", &record, 100).unwrap();
-    assert_eq!(store.take_pending("b", 151, 50).unwrap(), None, "expired");
-    assert_eq!(
-        store.take_pending("b", 100, 50).unwrap(),
-        None,
-        "an expired one is removed, not kept"
+    assert!(
+        store.claim_pending("b", 151, 50).unwrap().is_none(),
+        "expired"
     );
 
     store.put_pending("old", &record, 100).unwrap();
     store.put_pending("new", &record, 180).unwrap();
-    assert_eq!(store.prune_pending(200, 50).unwrap(), 1);
-    assert_eq!(store.take_pending("new", 200, 50).unwrap(), Some(record));
+    assert_eq!(store.prune_pending(200, 50).unwrap(), 2, "old and b");
+    assert!(store.claim_pending("new", 200, 50).unwrap().is_some());
     assert!(store.get("new").unwrap().is_none(), "pending is not live");
+}
+
+#[test]
+fn a_claim_is_void_after_deletion_or_restaging() {
+    let record = record();
+    let store = Store::open_in_memory().unwrap();
+
+    store.put_pending("a", &record, 100).unwrap();
+    let (_, claim) = store.claim_pending("a", 100, 50).unwrap().unwrap();
+    store.delete("a").unwrap();
+    assert!(
+        !store.finish_pending("a", &claim).unwrap(),
+        "a user deleted mid-confirmation stays deleted"
+    );
+
+    store.put_pending("b", &record, 100).unwrap();
+    let (_, claim) = store.claim_pending("b", 100, 50).unwrap().unwrap();
+    store.put_pending("b", &record, 110).unwrap();
+    assert!(
+        !store.finish_pending("b", &claim).unwrap(),
+        "a newer staged enrolment wins"
+    );
+    assert!(
+        store.claim_pending("b", 110, 50).unwrap().is_some(),
+        "and can be confirmed itself"
+    );
 }

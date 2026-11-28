@@ -37,7 +37,8 @@ Rules:
 - **One confirmation attempt.** A wrong confirmation discards the pending enrolment, and the user starts again from the first entry. That leaves no record that can be guessed at repeatedly through this endpoint, so confirmation needs no lockout of its own.
 - **Pending enrolments expire** after 10 minutes, and are pruned like expired lockout rows.
 - **The record comes from the first entry.** Confirmation only proves the user can repeat it. Two Argon2id runs per enrolment.
-- **No decoy for a missing pending enrolment.** Confirming with nothing pending answers `confirmed: false` at once. The caller has already authenticated the user with a possession factor and knows they are enrolling, so the timing gives nothing away.
+- **The same cost whether or not anything is pending.** Confirming with nothing pending verifies against a decoy, so timing does not show whether an enrolment is pending.
+- **A deletion during confirmation wins.** The record is made live only if its pending enrolment is still the current one once the taps have been checked.
 - `DELETE /v1/users/{user_id}` also removes a pending enrolment.
 - `/v1/enrol` stays as it is, for tests and direct provisioning.
 

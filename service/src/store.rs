@@ -79,7 +79,9 @@ impl Store {
              CREATE TABLE IF NOT EXISTS pending (
                  user_id TEXT PRIMARY KEY,
                  record  TEXT NOT NULL,
-                 created INTEGER NOT NULL
+                 created INTEGER NOT NULL,
+                 nonce   TEXT NOT NULL,
+                 claimed INTEGER NOT NULL
              );
              CREATE INDEX IF NOT EXISTS pending_by_age ON pending (created);",
         )?;
@@ -126,38 +128,50 @@ impl Store {
     /// The live record and failures are untouched.
     pub fn put_pending(&self, user_id: &str, record: &Record, now: u64) -> Result<(), StoreError> {
         let json = serde_json::to_string(record)?;
+        let mut nonce = [0u8; 16];
+        getrandom::fill(&mut nonce).map_err(|e| StoreError(format!("random nonce: {e}")))?;
         self.conn.execute(
-            "INSERT INTO pending (user_id, record, created) VALUES (?1, ?2, ?3)
-             ON CONFLICT (user_id) DO UPDATE SET record = ?2, created = ?3",
-            params![user_id, json, to_i64(now)],
+            "INSERT INTO pending (user_id, record, created, nonce, claimed) VALUES (?1, ?2, ?3, ?4, 0)
+             ON CONFLICT (user_id) DO UPDATE SET record = ?2, created = ?3, nonce = ?4, claimed = 0",
+            params![user_id, json, to_i64(now), hex::encode(nonce)],
         )?;
         Ok(())
     }
 
-    /// Remove and return the pending enrolment, if one was stored within the
-    /// last `ttl_secs`. Atomic, so of several concurrent callers only one gets
-    /// it. An expired one is removed and not returned.
-    pub fn take_pending(
+    /// Claim the pending enrolment for one confirmation attempt, if one was
+    /// stored within the last `ttl_secs` and is not already claimed. Returns
+    /// the record and a claim to pass to [`Store::finish_pending`]. Atomic, so
+    /// of several concurrent callers only one gets it.
+    pub fn claim_pending(
         &self,
         user_id: &str,
         now: u64,
         ttl_secs: u64,
-    ) -> Result<Option<Record>, StoreError> {
-        let row: Option<(String, i64)> = self
+    ) -> Result<Option<(Record, String)>, StoreError> {
+        let row: Option<(String, String)> = self
             .conn
             .query_row(
-                "DELETE FROM pending WHERE user_id = ?1 RETURNING record, created",
-                params![user_id],
+                "UPDATE pending SET claimed = 1
+                 WHERE user_id = ?1 AND claimed = 0 AND created >= ?2
+                 RETURNING record, nonce",
+                params![user_id, to_i64(now.saturating_sub(ttl_secs))],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()?;
-        let Some((json, created)) = row else {
-            return Ok(None);
-        };
-        if u64::try_from(created).unwrap_or(0) < now.saturating_sub(ttl_secs) {
-            return Ok(None);
-        }
-        Ok(Some(serde_json::from_str(&json)?))
+        row.map(|(json, nonce)| Ok((serde_json::from_str(&json)?, nonce)))
+            .transpose()
+    }
+
+    /// End a claim: remove the pending enrolment it was made on. Returns false
+    /// when that enrolment is already gone, because the user was deleted or
+    /// enrolment was staged again since the claim. The caller must then not
+    /// make it live.
+    pub fn finish_pending(&self, user_id: &str, claim: &str) -> Result<bool, StoreError> {
+        let removed = self.conn.execute(
+            "DELETE FROM pending WHERE user_id = ?1 AND nonce = ?2",
+            params![user_id, claim],
+        )?;
+        Ok(removed > 0)
     }
 
     /// Drop pending enrolments older than `ttl_secs`.
