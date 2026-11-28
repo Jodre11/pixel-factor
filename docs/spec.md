@@ -222,7 +222,7 @@ Later options: user uploads (more memorable, unvetted), and viewport-constrained
 
 ## 14. Recovery
 
-None, by design: nothing stored can reveal the sequence. A reset requires proving identity another way (the possession factor, or an admin) and then enrolling again. Same model as a password reset.
+None, by design: nothing stored can reveal the sequence. A reset requires proving identity another way (a full login with the possession factor, or an admin; the possession factor alone is not enough) and then enrolling again. Same model as a password reset.
 
 ## 15. Positioning
 
@@ -251,7 +251,7 @@ Rejected for now: loading Rust into Keycloak's JVM (JNI or a Java WASM runtime).
 
 1. Rust core library, with test vectors. DONE: `pixel-factor-core` v0.1. Example, property and known-answer tests, fuzzing and mutation testing. Unaudited.
 2. Rust HTTP service. DONE: `pixel-factor-service`, axum and SQLite, with lockout and a container image. See `service.md`.
-3. Keycloak authenticator plugin: first working demo, Keycloak in Docker. Next. The tap step runs only after the possession factor (section 16).
+3. Keycloak authenticator plugin: first working demo, Keycloak in Docker. DONE: `pixel-factor-keycloak` and `make demo`. The tap step runs only after the possession factor (section 16). See `keycloak.md`.
 4. OIDC host reusing the same service, for Entra ID external MFA and Okta's IdP authenticator, subject to how each classifies the factor type.
 
 Test early: enrol on desktop, log in on a phone.

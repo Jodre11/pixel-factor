@@ -105,3 +105,19 @@ jobs:
       # Runs the image as it would be deployed and drives it over HTTP.
       - name: Smoke test the image
         run: make container-smoke
+
+  keycloak:
+    name: keycloak plugin and demo
+    runs-on: ubuntu-26.04
+    env:
+      IMAGE: pixel-factor-service:ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Maven runs in a container pinned by digest; no JDK on the runner.
+      - name: Check the plugin
+        run: make plugin-check
+
+      # Keycloak and the service in compose, then a login through Keycloak's own pages.
+      - name: Smoke test the demo
+        run: make demo-smoke

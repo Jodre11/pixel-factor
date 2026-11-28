@@ -24,6 +24,10 @@ make container-smoke
 
 CI builds the image, scans it and the `Dockerfile` with Trivy, and runs that smoke test on every pull request. The image is not yet published to a registry. Publishing, and the deployment target, are decisions still to make.
 
+## Images
+
+Keycloak and the service must agree on every curated image. The plugin jar carries each image file at `resources/img/<id>.<ext>` in its theme resources, and `PF_IMAGES` lists the same ids with their aspects. Nothing checks that an image file's height over width equals its `PF_IMAGES` aspect: a mismatch shifts every tap and no one matches. Keeping them equal is the operator's job whenever an image is added or replaced. `make demo-smoke` checks it for the demo image.
+
 ## What version is live
 
 - `GET /version` answers `{"version", "commit"}`: the crate version and the git commit the binary was built from. It needs no token.

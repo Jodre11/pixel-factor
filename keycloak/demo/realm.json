@@ -1,0 +1,96 @@
+{
+  "realm": "demo",
+  "enabled": true,
+  "displayName": "pixel-factor demo",
+  "bruteForceProtected": true,
+  "browserFlow": "pixel-factor browser",
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyDigits": 6,
+  "otpPolicyPeriod": 30,
+  "requiredActions": [
+    {
+      "alias": "pixel-factor-enrol",
+      "name": "Set up tap sequence",
+      "providerId": "pixel-factor-enrol",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 10,
+      "config": {}
+    }
+  ],
+  "authenticationFlows": [
+    {
+      "alias": "pixel-factor browser",
+      "description": "Username, then a one-time code, then the tap sequence.",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-cookie",
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "authenticatorFlow": false,
+          "userSetupAllowed": false
+        },
+        {
+          "flowAlias": "pixel-factor forms",
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "authenticatorFlow": true,
+          "userSetupAllowed": false
+        }
+      ]
+    },
+    {
+      "alias": "pixel-factor forms",
+      "description": "The possession factor comes before the tap step.",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-username-form",
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "authenticatorFlow": false,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "auth-otp-form",
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "authenticatorFlow": false,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "pixel-factor",
+          "requirement": "REQUIRED",
+          "priority": 30,
+          "authenticatorFlow": false,
+          "userSetupAllowed": true
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "demo",
+      "enabled": true,
+      "email": "demo@example.invalid",
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "User",
+      "requiredActions": ["pixel-factor-enrol"],
+      "credentials": [
+        {
+          "type": "otp",
+          "userLabel": "Demo authenticator",
+          "secretData": "{\"value\":\"public-demo-otp-not-a-secret\"}",
+          "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\"}"
+        }
+      ]
+    }
+  ]
+}

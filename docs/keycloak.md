@@ -1,6 +1,6 @@
 # Keycloak authenticator plugin: design
 
-Status: design, not built. This is step 3 of the build order in [spec.md](spec.md) section 17: the first working demo, with Keycloak in Docker. The plugin is glue: it shows the tap page, calls the service and records the outcome. It holds no secret and does no geometry or cryptography (spec section 16, principle 5 in [PRODUCT.md](PRODUCT.md)).
+Status: built; `make demo` runs it. This is step 3 of the build order in [spec.md](spec.md) section 17: the first working demo, with Keycloak in Docker. The plugin is glue: it shows the tap page, calls the service and records the outcome. It holds no secret and does no geometry or cryptography (spec section 16, principle 5 in [PRODUCT.md](PRODUCT.md)).
 
 ## Goals
 
@@ -61,7 +61,7 @@ All in one provider jar, `keycloak/` at the repository root.
 | `PixelFactorEnrolAction` and its factory | `RequiredActionProvider` | Enrolment and re-enrolment. |
 | `PixelFactorCredentialProvider` and its factory | `CredentialProvider` | A marker credential, so Keycloak knows who is enrolled and the account console can show and remove it. |
 | `PossessionGate` | none | The check shared by the tap step and enrolment. |
-| `ServiceClient` | none | The calls to the service. |
+| `PixelFactorService` and `HttpServiceClient` | none | The calls to the service. |
 | `pixel-factor-tap.ftl` and `tap.js` | theme resources in the jar | The tap page, for login and enrolment. |
 
 ### The marker credential
@@ -131,7 +131,7 @@ Forms                       ALTERNATIVE
 
 ## Enrolment
 
-Run as a required action, either for a user who has never enrolled (set by `configuredFor`) or on request: the user from the account console, or an admin. It starts with the possession gate, so it cannot run on a username alone. Re-enrolment from the account console is an application-initiated action: the action sets a maximum authentication age of zero, so Keycloak makes the user log in afresh and the possession factor succeeds in the same session the gate checks. (To confirm in implementation: a session resumed from a cookie has no possession `SUCCESS`, and must not pass.)
+Run as a required action, either for a user who has never enrolled (set by `configuredFor`) or on request: the user from the account console, or an admin. It starts with the possession gate, so it cannot run on a username alone. Re-enrolment from the account console is an application-initiated action: the action sets a maximum authentication age of zero, so Keycloak makes the user log in afresh and the possession factor succeeds in the same session the gate checks. A session resumed from a cookie has no possession `SUCCESS`, so it does not pass; the demo smoke test checks this.
 
 1. The possession gate.
 2. `POST /v1/challenge`, as at login. Show the image.
@@ -154,6 +154,7 @@ Follows spec section 12.
 - The taps of the current entry are marked with numbered dots, with Undo and Clear. These are the user's own input on their own screen, like a password field's dots; nothing about earlier entries or the enrolled points is ever shown (non-goal "No hints"). The page stops accepting taps at `max_taps`.
 - **Fixed-length submission.** The form field always holds `max_taps` coordinate pairs, each formatted to a fixed width, with unused pairs as a fixed filler the plugin strips. `max_taps` comes from the service and is the same for every user, so the request size is the same for every sequence and a network observer cannot count taps from it.
 - The page sends taps and nothing else; it never receives offsets, records or the pepper.
+- **Keyboard and assistive technology.** The image takes keyboard focus: arrow keys move a cursor (Shift for bigger steps), Enter or Space places a tap there and Backspace removes the last one, so keyboard and switch users can enter a sequence. A polite live region announces only "Point added", "Point removed" and "All points cleared", never a position. The factor is visual by nature, so a user who cannot see the image cannot use it; such a user needs a realm flow with another factor in its place, which is the operator's decision.
 
 The script is plain JavaScript with no external libraries, served from the jar, under Keycloak's default content security policy.
 
@@ -181,8 +182,10 @@ New Makefile targets, all running Maven inside the pinned container:
 | Target | Does |
 |---|---|
 | `plugin-check` | Format check, compile with warnings as errors, unit tests. |
+| `plugin-fmt` | Format the plugin's Java code. |
+| `plugin-jar` | Build the jar into `keycloak/target`. |
 | `demo` | Build the jar and the service image, start the compose stack, print the login URL and the OTP secret. |
-| `demo-smoke` | Start the stack; check that Keycloak loaded the provider and imported the realm; from inside the network, drive the service calls the plugin uses (challenge, staged enrolment, confirmation, verify, delete); check the demo image's aspect; stop it. |
+| `demo-smoke` | Start the stack on a free port; check that Keycloak loaded the providers and imported the realm; from inside the network, drive the service calls the plugin uses (challenge, staged enrolment, confirmation, verify, delete); check the demo image's aspect; then log in through Keycloak's own pages with a generated one-time code: enrol, confirm, fail with a wrong sequence, succeed with the right one, and check that re-enrolment asks for a fresh login; stop it. |
 
 `make check` stays Rust-only and offline. Maven needs the network the first time it fetches Keycloak's jars, which would break that promise; the plugin targets are separate, and CI runs `plugin-check` and `demo-smoke` on every pull request. Dependabot gains the `maven` and `docker-compose` ecosystems.
 
@@ -190,8 +193,8 @@ New Makefile targets, all running Maven inside the pinned container:
 
 - **Service** (pull request 1): the staged enrolment rules above, each as a test in `service/tests/api.rs`, and the new calls added to `scripts/smoke.sh`.
 - **Plugin unit tests** (JUnit 5, Mockito for Keycloak's context objects): the possession gate passes only on a listed provider with `SUCCESS` and fails closed otherwise, including `SETUP_REQUIRED`; every service outcome, including each error in "Service errors", maps to the right flow result; nothing yields success on an error; the tap parser turns any bad input into an empty sequence; enrolment calls the service in order and writes the marker only after a confirmation; re-enrolment updates the marker rather than replacing it.
-- **Demo smoke**, as above. It exercises `ServiceClient`'s calls against the real service image.
-- **Next step, not in this one**: a Playwright test that logs in through the demo with a generated OTP and taps the image.
+- **Demo smoke**, as above. It exercises `HttpServiceClient`'s calls against the real service image, and the plugin inside Keycloak through `keycloak/demo/login_smoke.py`, which posts the taps field as the page's script builds it.
+- **Next step, not in this one**: a Playwright test that taps the image in a real browser, so `pixel-factor-tap.js` itself is exercised.
 
 ## Assumptions
 

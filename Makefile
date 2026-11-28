@@ -18,9 +18,14 @@ PF_DEV_PEPPER_HEX ?= 6465762d6f6e6c792d7065707065722d6e6f742d666f722d70726f64756
 # Tag for `make image`, named after this checkout's directory so sessions in different worktrees do not
 # overwrite each other's image. Characters a tag cannot hold become '-'.
 IMAGE ?= pixel-factor-service:$(shell basename "$(CURDIR)" | tr -c 'A-Za-z0-9_.\n-' '-' | cut -c1-128)
+# Maven for the Keycloak plugin, run in a container pinned by digest so no JDK is needed on the host. The volume
+# caches downloaded jars between runs.
+MAVEN_IMAGE ?= maven@sha256:99e61abcff91a9b1333463bd8451fb18495d6eba9250ac66a338b518f8278320
+MAVEN = docker run --rm -v "$(CURDIR)/keycloak:/src" -v pixel-factor-m2:/root/.m2 -w /src $(MAVEN_IMAGE) mvn -B -q
 
 .PHONY: help setup tools-deep check check-changed fmt fmt-check lint test doc \
-	docs-check deny shellcheck fuzz-check advisories coverage mutants fuzz kat timing serve smoke image container-smoke iac-scan image-scan
+	docs-check deny shellcheck fuzz-check advisories coverage mutants fuzz kat timing serve smoke image container-smoke iac-scan image-scan \
+	plugin-check plugin-fmt plugin-jar demo demo-smoke
 
 help: ## List the available commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | sort
@@ -107,3 +112,18 @@ image-scan: ## Trivy vulnerability scan of IMAGE (run `make image` first)
 
 timing: ## Time one enrolment and verification at production settings
 	@cargo run --quiet --locked --release -p pixel-factor-core --example timing
+
+plugin-check: ## Keycloak plugin: format check, compile with warnings as errors, unit tests (needs Docker)
+	$(MAVEN) spotless:check verify
+
+plugin-fmt: ## Format the Keycloak plugin's Java code (needs Docker)
+	$(MAVEN) spotless:apply
+
+plugin-jar: ## Build the Keycloak plugin jar into keycloak/target (needs Docker)
+	$(MAVEN) -DskipTests package
+
+demo: plugin-jar image ## Start Keycloak with the plugin and the service; print the login URL and one-time code secret
+	scripts/demo.sh $(IMAGE)
+
+demo-smoke: plugin-jar image ## Start the demo on a free port and check it end to end through Keycloak's pages
+	scripts/demo-smoke.sh $(IMAGE)

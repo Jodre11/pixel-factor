@@ -14,3 +14,13 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  # The Keycloak plugin's build: Keycloak, test libraries and Maven plugins.
+  - package-ecosystem: maven
+    directory: /keycloak
+    schedule:
+      interval: weekly
+  # The demo's Keycloak image, pinned by digest.
+  - package-ecosystem: docker-compose
+    directory: /keycloak/demo
+    schedule:
+      interval: weekly

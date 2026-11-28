@@ -49,5 +49,5 @@ In priority order. When two conflict, the higher one wins.
 | Stolen database does not reveal the sequence | Designed and implemented in the core. Unaudited. |
 | All or nothing | Implemented and tested in the core. |
 | Tolerant across devices | Implemented in the core. Not yet tested with real users or a real client. |
-| Easy to adopt | Not yet. The HTTP service and Keycloak plugin do not exist. |
+| Easy to adopt | A Keycloak plugin and a one-command Docker demo exist. No production pepper (KMS) yet, and no other identity system. |
 | Honest about limits | Entropy figures are in `spec.md`. Hotspot effects are estimated, not measured. |
