@@ -45,6 +45,9 @@ pub const MAX_BODY: usize = 16 * 1024;
 /// Longest user id accepted, in bytes.
 pub const MAX_USER_ID_LEN: usize = 255;
 
+/// How long a pending enrolment waits for its confirmation, in seconds.
+pub const PENDING_TTL_SECS: u64 = 600;
+
 const DOMAIN_CHALLENGE: &[u8] = b"pfsvc/challenge";
 
 /// The commit the binary was built from, when the build set `PF_BUILD_COMMIT`.
@@ -176,6 +179,8 @@ pub fn router(app: Arc<App>) -> Router {
     let v1 = Router::new()
         .route("/v1/challenge", post(challenge))
         .route("/v1/enrol", post(enrol_user))
+        .route("/v1/enrolments", post(stage_enrolment))
+        .route("/v1/enrolments/confirm", post(confirm_enrolment))
         .route("/v1/verify", post(verify_user))
         .route("/v1/users/{user_id}", delete(delete_user))
         .route_layer(middleware::from_fn_with_state(app.clone(), require_token));
@@ -230,6 +235,13 @@ struct ChallengeRequest {
 #[derive(Serialize)]
 struct ChallengeAnswer {
     image_id: String,
+    max_taps: usize,
+}
+
+/// The most taps the policy accepts. The same for every image and user, so a
+/// client can pad every submission to it.
+fn max_taps() -> usize {
+    Policy::standard(1.0).max_taps
 }
 
 async fn challenge(
@@ -247,7 +259,10 @@ async fn challenge(
         }
     })
     .await?;
-    Ok(Json(ChallengeAnswer { image_id }))
+    Ok(Json(ChallengeAnswer {
+        image_id,
+        max_taps: max_taps(),
+    }))
 }
 
 #[derive(Deserialize)]
@@ -263,9 +278,32 @@ struct EnrolAnswer {
     warnings: Vec<String>,
 }
 
+/// Where a new enrolment goes: straight to the live record, or to the pending
+/// slot to wait for confirmation.
+#[derive(Clone, Copy)]
+enum Target {
+    Live,
+    Pending,
+}
+
 async fn enrol_user(
     State(app): State<Arc<App>>,
     Json(req): Json<EnrolRequest>,
+) -> Result<(StatusCode, Json<EnrolAnswer>), ApiError> {
+    enrol_into(app, req, Target::Live).await
+}
+
+async fn stage_enrolment(
+    State(app): State<Arc<App>>,
+    Json(req): Json<EnrolRequest>,
+) -> Result<(StatusCode, Json<EnrolAnswer>), ApiError> {
+    enrol_into(app, req, Target::Pending).await
+}
+
+async fn enrol_into(
+    app: Arc<App>,
+    req: EnrolRequest,
+    target: Target,
 ) -> Result<(StatusCode, Json<EnrolAnswer>), ApiError> {
     check_user_id(&req.user_id)?;
     let Some(aspect) = app.images.get(&req.image_id).copied() else {
@@ -285,12 +323,69 @@ async fn enrol_user(
             &policy(aspect, app2.kdf),
             app2.pepper.as_ref(),
         )?;
-        lock(&app2.store)?.put(&req.user_id, &enrolment.record)?;
-        tracing::info!(user_id = ?req.user_id, image_id = ?req.image_id, "enrolled");
+        let store = lock(&app2.store)?;
+        match target {
+            Target::Live => {
+                store.put(&req.user_id, &enrolment.record)?;
+                tracing::info!(user_id = ?req.user_id, image_id = ?req.image_id, "enrolled");
+            }
+            Target::Pending => {
+                let now = unix_now();
+                store.put_pending(&req.user_id, &enrolment.record, now)?;
+                store.prune_pending(now, PENDING_TTL_SECS)?;
+                tracing::info!(user_id = ?req.user_id, image_id = ?req.image_id, "enrolment staged");
+            }
+        }
         Ok(enrolment.warnings.iter().map(describe).collect())
     })
     .await?;
     Ok((StatusCode::CREATED, Json(EnrolAnswer { warnings })))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConfirmRequest {
+    user_id: String,
+    taps: Vec<[f64; 2]>,
+}
+
+/// The answer to a confirmation.
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConfirmAnswer {
+    /// The taps matched the pending enrolment, which is now the live record.
+    pub confirmed: bool,
+}
+
+/// The pending enrolment is taken out of the store before its taps are
+/// checked, so it gets exactly one confirmation attempt, even under
+/// concurrent requests. A wrong one leaves nothing to guess against.
+async fn confirm_enrolment(
+    State(app): State<Arc<App>>,
+    Json(req): Json<ConfirmRequest>,
+) -> Result<Json<ConfirmAnswer>, ApiError> {
+    check_user_id(&req.user_id)?;
+    let _permit = app
+        .work
+        .acquire()
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let app2 = app.clone();
+    let confirmed = blocking(move || {
+        let pending = lock(&app2.store)?.take_pending(&req.user_id, unix_now(), PENDING_TTL_SECS)?;
+        let Some(record) = pending else {
+            tracing::info!(user_id = ?req.user_id, outcome = "none_pending", "enrolment confirmation");
+            return Ok(false);
+        };
+        if !verify(&points(&req.taps), &record, app2.pepper.as_ref())? {
+            tracing::info!(user_id = ?req.user_id, outcome = "no_match", "enrolment confirmation");
+            return Ok(false);
+        }
+        lock(&app2.store)?.put(&req.user_id, &record)?;
+        tracing::info!(user_id = ?req.user_id, image_id = ?record.image_id, outcome = "confirmed", "enrolled");
+        Ok(true)
+    })
+    .await?;
+    Ok(Json(ConfirmAnswer { confirmed }))
 }
 
 fn describe(warning: &Warning) -> String {

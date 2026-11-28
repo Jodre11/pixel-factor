@@ -2,7 +2,8 @@
 //!
 //! Records live in `users`. Failure counts live in `failures`, keyed by user
 //! id whether or not the user exists, so lockout behaves the same for unknown
-//! ids and does not reveal which ids are real.
+//! ids and does not reveal which ids are real. Enrolments waiting for
+//! confirmation live in `pending`, at most one per user id.
 
 use pixel_factor_core::Record;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -74,7 +75,13 @@ impl Store {
                  locked_until INTEGER NOT NULL,
                  last_failure INTEGER NOT NULL
              );
-             CREATE INDEX IF NOT EXISTS failures_by_age ON failures (last_failure);",
+             CREATE INDEX IF NOT EXISTS failures_by_age ON failures (last_failure);
+             CREATE TABLE IF NOT EXISTS pending (
+                 user_id TEXT PRIMARY KEY,
+                 record  TEXT NOT NULL,
+                 created INTEGER NOT NULL
+             );
+             CREATE INDEX IF NOT EXISTS pending_by_age ON pending (created);",
         )?;
         Ok(Self { conn })
     }
@@ -105,11 +112,60 @@ impl Store {
         self.clear_failures(user_id)
     }
 
-    /// Remove a user and their failures. Not an error if there is none.
+    /// Remove a user, their failures and any pending enrolment. Not an error
+    /// if there is none.
     pub fn delete(&self, user_id: &str) -> Result<(), StoreError> {
         self.conn
             .execute("DELETE FROM users WHERE user_id = ?1", params![user_id])?;
+        self.conn
+            .execute("DELETE FROM pending WHERE user_id = ?1", params![user_id])?;
         self.clear_failures(user_id)
+    }
+
+    /// Store an enrolment waiting for confirmation, replacing any earlier one.
+    /// The live record and failures are untouched.
+    pub fn put_pending(&self, user_id: &str, record: &Record, now: u64) -> Result<(), StoreError> {
+        let json = serde_json::to_string(record)?;
+        self.conn.execute(
+            "INSERT INTO pending (user_id, record, created) VALUES (?1, ?2, ?3)
+             ON CONFLICT (user_id) DO UPDATE SET record = ?2, created = ?3",
+            params![user_id, json, to_i64(now)],
+        )?;
+        Ok(())
+    }
+
+    /// Remove and return the pending enrolment, if one was stored within the
+    /// last `ttl_secs`. Atomic, so of several concurrent callers only one gets
+    /// it. An expired one is removed and not returned.
+    pub fn take_pending(
+        &self,
+        user_id: &str,
+        now: u64,
+        ttl_secs: u64,
+    ) -> Result<Option<Record>, StoreError> {
+        let row: Option<(String, i64)> = self
+            .conn
+            .query_row(
+                "DELETE FROM pending WHERE user_id = ?1 RETURNING record, created",
+                params![user_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        let Some((json, created)) = row else {
+            return Ok(None);
+        };
+        if u64::try_from(created).unwrap_or(0) < now.saturating_sub(ttl_secs) {
+            return Ok(None);
+        }
+        Ok(Some(serde_json::from_str(&json)?))
+    }
+
+    /// Drop pending enrolments older than `ttl_secs`.
+    pub fn prune_pending(&self, now: u64, ttl_secs: u64) -> Result<usize, StoreError> {
+        Ok(self.conn.execute(
+            "DELETE FROM pending WHERE created < ?1",
+            params![to_i64(now.saturating_sub(ttl_secs))],
+        )?)
     }
 
     /// Failures for `user_id` that are still inside the window.

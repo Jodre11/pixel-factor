@@ -13,6 +13,7 @@ A change to the stored record format is always called out here, with the new `RE
 
 ### Added
 
+- **Staged enrolment** in the service: `POST /v1/enrolments` stores a pending enrolment without touching the live record, and `POST /v1/enrolments/confirm` makes it live only if the user repeats the taps. One confirmation attempt; pending enrolments expire after 10 minutes. `/v1/challenge` now also returns `max_taps`, so a client can pad every submission to the same length.
 - `pixel-factor-service` 0.1: an HTTP API (challenge, enrol, verify, delete, health, version) over axum and SQLite, configured from the environment. Unknown user ids are indistinguishable from real ones in answers, timing and lockout. Lockout is exponential and expires. Development pepper only. `make serve` runs it locally and `make smoke` drives it end to end; CI runs the smoke test.
 - Container image for the service (distroless, non-root, health check, JSON logs, clean shutdown on SIGTERM), scanned by Trivy and smoke-tested in CI. `docs/OPERATIONS.md` covers deployment, the running version, logs and alerts.
 - `pixel-factor-core` 0.1: enrolment and verification of an ordered tap sequence with hexagonal tolerance, chained offset encryption and a single peppered verifier. Record format version 1, locked by a known-answer vector.

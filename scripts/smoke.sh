@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Drive the HTTP service end to end: challenge, enrol, verify, delete.
+# Drive the HTTP service end to end: challenge, enrol, staged enrolment, verify, delete.
 #
 #   scripts/smoke.sh               start a throwaway service, test it, stop it
 #   scripts/smoke.sh <base-url>    test a service that is already running
@@ -57,10 +57,14 @@ step() {
 
 step healthz 200 ok GET /healthz
 step version 200 '"version"' GET /version
-step challenge 200 '"image_id":"demo"' POST /v1/challenge "{\"user_id\":\"$user\"}"
+step challenge 200 '"max_taps":8' POST /v1/challenge "{\"user_id\":\"$user\"}"
 step enrol 201 '"warnings"' POST /v1/enrol "{\"user_id\":\"$user\",\"image_id\":\"demo\",\"taps\":$taps}"
 step "verify, right taps" 200 '"match":true' POST /v1/verify "{\"user_id\":\"$user\",\"taps\":$taps}"
 step "verify, wrong taps" 200 '"match":false' POST /v1/verify "{\"user_id\":\"$user\",\"taps\":$wrong}"
+step "stage enrolment" 201 '"warnings"' POST /v1/enrolments "{\"user_id\":\"$user\",\"image_id\":\"demo\",\"taps\":$wrong}"
+step "verify, still the old taps" 200 '"match":true' POST /v1/verify "{\"user_id\":\"$user\",\"taps\":$taps}"
+step "confirm enrolment" 200 '"confirmed":true' POST /v1/enrolments/confirm "{\"user_id\":\"$user\",\"taps\":$wrong}"
+step "verify, the new taps" 200 '"match":true' POST /v1/verify "{\"user_id\":\"$user\",\"taps\":$wrong}"
 step delete 204 '' DELETE "/v1/users/$user"
-step "verify, deleted" 200 '"match":false' POST /v1/verify "{\"user_id\":\"$user\",\"taps\":$taps}"
+step "verify, deleted" 200 '"match":false' POST /v1/verify "{\"user_id\":\"$user\",\"taps\":$wrong}"
 echo "smoke: all steps passed against $base"
