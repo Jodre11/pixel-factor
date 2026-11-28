@@ -252,7 +252,12 @@ Rejected for now: loading Rust into Keycloak's JVM (JNI or a Java WASM runtime).
 1. Rust core library, with test vectors. DONE: `pixel-factor-core` v0.1. Example, property and known-answer tests, fuzzing and mutation testing. Unaudited.
 2. Rust HTTP service. DONE: `pixel-factor-service`, axum and SQLite, with lockout and a container image. See `service.md`.
 3. Keycloak authenticator plugin: first working demo, Keycloak in Docker. DONE: `pixel-factor-keycloak` and `make demo`. The tap step runs only after the possession factor (section 16). See `keycloak.md`.
-4. OIDC host reusing the same service, for Entra ID external MFA and Okta's IdP authenticator, subject to how each classifies the factor type.
+4. OIDC host reusing the same service, for Entra ID external MFA and Okta's IdP authenticator, subject to how each classifies the factor type. BLOCKED: neither accepts a knowledge factor as a second factor (checked 28 November 2026).
+   - Entra ID external authentication methods accept only possession `amr` values (`fido`, `otp`, `hwk`, `sms` and others) or inherence values (`face`, `fpt` and others), and "only methods with a different type can satisfy the second factor requirement". No knowledge value (`pwd`, `pin`, `kba`) is accepted. Source: Microsoft Learn, "Microsoft Entra External MFA Method Provider Reference".
+   - Okta's IdP authenticator "is a possession factor and verifies user presence". The type is fixed. Source: Okta Help, "Configure the IdP authenticator".
+   - Both put the tap step after the platform's own first factor, usually a password, so the possession-first rule in section 16 cannot hold.
+
+   The host could pass only by reporting a possession factor it does not provide, which breaks principle 3 in `PRODUCT.md`. An honest host would have to run its own possession factor (passkey or OTP) before the tap step and report that. That is a different product and is not planned.
 
 Test early: enrol on desktop, log in on a phone.
 
