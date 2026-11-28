@@ -154,6 +154,7 @@ Follows spec section 12.
 - The taps of the current entry are marked with numbered dots, with Undo and Clear. These are the user's own input on their own screen, like a password field's dots; nothing about earlier entries or the enrolled points is ever shown (non-goal "No hints"). The page stops accepting taps at `max_taps`.
 - **Fixed-length submission.** The form field always holds `max_taps` coordinate pairs, each formatted to a fixed width, with unused pairs as a fixed filler the plugin strips. `max_taps` comes from the service and is the same for every user, so the request size is the same for every sequence and a network observer cannot count taps from it.
 - The page sends taps and nothing else; it never receives offsets, records or the pepper.
+- **Keyboard and assistive technology.** The image takes keyboard focus: arrow keys move a cursor (Shift for bigger steps), Enter or Space places a tap there and Backspace removes the last one, so keyboard and switch users can enter a sequence. A polite live region announces only "Point added", "Point removed" and "All points cleared", never a position. The factor is visual by nature, so a user who cannot see the image cannot use it; such a user needs a realm flow with another factor in its place, which is the operator's decision.
 
 The script is plain JavaScript with no external libraries, served from the jar, under Keycloak's default content security policy.
 

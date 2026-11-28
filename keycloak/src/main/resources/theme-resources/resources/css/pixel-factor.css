@@ -8,6 +8,11 @@
     -webkit-user-select: none;
 }
 
+#pf-stage:focus-visible {
+    outline: 3px solid #0066cc;
+    outline-offset: 2px;
+}
+
 #pf-image {
     display: block;
     width: 100%;
@@ -15,19 +20,38 @@
     cursor: crosshair;
 }
 
+/* A dark outer ring keeps the dot visible on light and dark parts of the image alike. */
 .pf-dot {
     position: absolute;
-    width: 1.5rem;
-    height: 1.5rem;
-    margin: -0.75rem 0 0 -0.75rem;
+    width: 1.75rem;
+    height: 1.75rem;
+    margin: -0.875rem 0 0 -0.875rem;
     border: 2px solid #fff;
     border-radius: 50%;
-    background: rgba(0, 0, 0, 0.6);
+    box-shadow: 0 0 0 2px #000;
+    background: rgba(0, 0, 0, 0.75);
     color: #fff;
-    font-size: 0.75rem;
-    line-height: 1.25rem;
+    font-size: 0.875rem;
+    line-height: 1.5rem;
     text-align: center;
     pointer-events: none;
+}
+
+/* The keyboard cursor, shown only while the image has keyboard focus. */
+#pf-cursor {
+    position: absolute;
+    display: none;
+    width: 1.25rem;
+    height: 1.25rem;
+    margin: -0.625rem 0 0 -0.625rem;
+    border: 2px dashed #fff;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px #000;
+    pointer-events: none;
+}
+
+#pf-stage:focus-visible #pf-cursor {
+    display: block;
 }
 
 #pf-controls {
@@ -38,4 +62,13 @@
 
 #pf-warnings {
     margin: 0 0 1rem;
+}
+
+.pf-visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
 }

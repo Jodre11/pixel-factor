@@ -32,7 +32,7 @@ public final class PixelFactorAuthenticator implements Authenticator {
 
     @Override
     public void authenticate(AuthenticationFlowContext context) {
-        if (!gate(context)) {
+        if (!requirePossession(context)) {
             return;
         }
         PixelFactorService.Challenge challenge;
@@ -45,12 +45,12 @@ public final class PixelFactorAuthenticator implements Authenticator {
         AuthenticationSessionModel session = context.getAuthenticationSession();
         session.setAuthNote(NOTE_IMAGE, challenge.imageId());
         session.setAuthNote(NOTE_MAX_TAPS, Integer.toString(challenge.maxTaps()));
-        page(context, null).ifPresent(context::challenge);
+        pageOrFail(context, null).ifPresent(context::challenge);
     }
 
     @Override
     public void action(AuthenticationFlowContext context) {
-        if (!gate(context)) {
+        if (!requirePossession(context)) {
             return;
         }
         Integer maxTaps = maxTaps(context.getAuthenticationSession());
@@ -76,11 +76,12 @@ public final class PixelFactorAuthenticator implements Authenticator {
         // flag for unknown ids too.
         String message = answer.locked() ? "pixelFactorLocked" : "pixelFactorNoMatch";
         context.getEvent().user(context.getUser()).error(Errors.INVALID_USER_CREDENTIALS);
-        page(context, message)
+        pageOrFail(context, message)
                 .ifPresent(response -> context.failureChallenge(AuthenticationFlowError.INVALID_CREDENTIALS, response));
     }
 
-    private boolean gate(AuthenticationFlowContext context) {
+    /** True if a possession factor passed; otherwise fails the flow with {@code ACCESS_DENIED} and returns false. */
+    private boolean requirePossession(AuthenticationFlowContext context) {
         if (PossessionGate.passed(context.getAuthenticationSession(), context.getRealm())) {
             return true;
         }
@@ -90,14 +91,20 @@ public final class PixelFactorAuthenticator implements Authenticator {
         return false;
     }
 
-    /** The tap page, or empty after failing the flow if the jar has no file for the image. */
-    private Optional<Response> page(AuthenticationFlowContext context, String error) {
+    /**
+     * The tap page. If it cannot be built, fails the flow with {@code INTERNAL_ERROR} and returns empty, so the caller
+     * must do nothing further.
+     */
+    private Optional<Response> pageOrFail(AuthenticationFlowContext context, String error) {
         AuthenticationSessionModel session = context.getAuthenticationSession();
-        String imageId = session.getAuthNote(NOTE_IMAGE);
         Integer maxTaps = maxTaps(session);
-        Optional<Response> page = maxTaps == null
-                ? Optional.empty()
-                : TapPage.render(context.form(), TapPage.Mode.LOGIN, imageId, maxTaps, List.of(), error);
+        if (maxTaps == null) {
+            LOG.error("pixel-factor: missing or invalid max-taps note in the authentication session");
+            context.failure(AuthenticationFlowError.INTERNAL_ERROR);
+            return Optional.empty();
+        }
+        Optional<Response> page = TapPage.render(
+                context.form(), TapPage.Mode.LOGIN, session.getAuthNote(NOTE_IMAGE), maxTaps, List.of(), error);
         if (page.isEmpty()) {
             LOG.error("pixel-factor: no image file in the plugin for the image the service chose");
             context.failure(AuthenticationFlowError.INTERNAL_ERROR);

@@ -57,7 +57,8 @@ class LocalPolicy(http.cookiejar.DefaultCookiePolicy):
 class Browser:
     def __init__(self, base):
         self.base = base.rstrip("/")
-        self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar(LocalPolicy())))
+        jar = http.cookiejar.CookieJar(LocalPolicy())
+        self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
 
     def get(self, url):
         with self.opener.open(url, timeout=30) as response:

@@ -56,7 +56,7 @@ public final class PixelFactorEnrolAction implements RequiredActionProvider {
 
     @Override
     public void requiredActionChallenge(RequiredActionContext context) {
-        if (!gate(context)) {
+        if (!requirePossession(context)) {
             return;
         }
         PixelFactorService.Challenge challenge;
@@ -70,12 +70,12 @@ public final class PixelFactorEnrolAction implements RequiredActionProvider {
         session.setAuthNote(PixelFactorAuthenticator.NOTE_IMAGE, challenge.imageId());
         session.setAuthNote(PixelFactorAuthenticator.NOTE_MAX_TAPS, Integer.toString(challenge.maxTaps()));
         session.setAuthNote(NOTE_STEP, STEP_ENROL);
-        show(context, TapPage.Mode.ENROL, List.of(), null);
+        showOrFail(context, TapPage.Mode.ENROL, List.of(), null);
     }
 
     @Override
     public void processAction(RequiredActionContext context) {
-        if (!gate(context)) {
+        if (!requirePossession(context)) {
             return;
         }
         AuthenticationSessionModel session = context.getAuthenticationSession();
@@ -88,7 +88,7 @@ public final class PixelFactorEnrolAction implements RequiredActionProvider {
         MultivaluedMap<String, String> form = context.getHttpRequest().getDecodedFormParameters();
         if (form.containsKey(FIELD_RESTART)) {
             session.setAuthNote(NOTE_STEP, STEP_ENROL);
-            show(context, TapPage.Mode.ENROL, List.of(), null);
+            showOrFail(context, TapPage.Mode.ENROL, List.of(), null);
             return;
         }
         List<double[]> taps = Taps.parse(form.getFirst(PixelFactorAuthenticator.FIELD_TAPS), maxTaps);
@@ -108,13 +108,13 @@ public final class PixelFactorEnrolAction implements RequiredActionProvider {
             throws PixelFactorService.ServiceException {
         PixelFactorService.Staged staged = service.stageEnrolment(userId, imageId, taps);
         if (!staged.accepted()) {
-            show(context, TapPage.Mode.ENROL, List.of(), "pixelFactorRejected", staged.reason());
+            showOrFail(context, TapPage.Mode.ENROL, List.of(), "pixelFactorRejected", staged.reason());
             return;
         }
         AuthenticationSessionModel session = context.getAuthenticationSession();
         session.setAuthNote(NOTE_STEP, STEP_CONFIRM);
         session.setAuthNote(NOTE_WARNINGS, String.join("\n", staged.warnings()));
-        show(context, TapPage.Mode.CONFIRM, staged.warnings(), null);
+        showOrFail(context, TapPage.Mode.CONFIRM, staged.warnings(), null);
     }
 
     private void confirm(RequiredActionContext context, String userId, String imageId, List<double[]> taps)
@@ -123,7 +123,7 @@ public final class PixelFactorEnrolAction implements RequiredActionProvider {
         if (!service.confirmEnrolment(userId, taps)) {
             // The service discards the pending enrolment on a wrong confirmation: start again.
             session.setAuthNote(NOTE_STEP, STEP_ENROL);
-            show(context, TapPage.Mode.ENROL, List.of(), "pixelFactorConfirmMismatch");
+            showOrFail(context, TapPage.Mode.ENROL, List.of(), "pixelFactorConfirmMismatch");
             return;
         }
         PixelFactorCredentialProvider.recordEnrolment(context.getUser(), imageId);
@@ -132,7 +132,8 @@ public final class PixelFactorEnrolAction implements RequiredActionProvider {
         context.success();
     }
 
-    private void show(
+    /** Show the tap page, or fail the action if it cannot be built. */
+    private void showOrFail(
             RequiredActionContext context,
             TapPage.Mode mode,
             List<String> warnings,
@@ -141,9 +142,12 @@ public final class PixelFactorEnrolAction implements RequiredActionProvider {
         AuthenticationSessionModel session = context.getAuthenticationSession();
         Integer maxTaps = PixelFactorAuthenticator.maxTaps(session);
         String imageId = session.getAuthNote(PixelFactorAuthenticator.NOTE_IMAGE);
-        Optional<Response> page = maxTaps == null
-                ? Optional.empty()
-                : TapPage.render(context.form(), mode, imageId, maxTaps, warnings, error, errorParams);
+        if (maxTaps == null) {
+            LOG.error("pixel-factor: missing or invalid max-taps note in the authentication session");
+            context.failure("pixelFactorServiceError");
+            return;
+        }
+        Optional<Response> page = TapPage.render(context.form(), mode, imageId, maxTaps, warnings, error, errorParams);
         if (page.isEmpty()) {
             LOG.error("pixel-factor: no image file in the plugin for the image the service chose");
             context.failure("pixelFactorServiceError");
@@ -152,7 +156,8 @@ public final class PixelFactorEnrolAction implements RequiredActionProvider {
         context.challenge(page.get());
     }
 
-    private static boolean gate(RequiredActionContext context) {
+    /** True if a possession factor passed; otherwise fails the action and returns false. */
+    private static boolean requirePossession(RequiredActionContext context) {
         if (PossessionGate.passed(context.getAuthenticationSession(), context.getRealm())) {
             return true;
         }
