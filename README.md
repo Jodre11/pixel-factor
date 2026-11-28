@@ -54,9 +54,8 @@ The Rust toolchain is pinned in `rust-toolchain.toml` and installed by rustup on
 | `core/` | Rust library: geometry, enrolment, verification. No I/O. |
 | `service/` | HTTP service around the core: axum and SQLite, with a container image. |
 | `docs/` | How it works, product, design spec, byte-level formats, threat model and operations. |
+| `keycloak/` | Keycloak authenticator plugin and a Docker demo: `make demo`. |
 | `scripts/` | Check scripts used by the Makefile, the git hook and CI. |
-
-Planned: a Keycloak authenticator plugin and a tap demo page.
 
 ## Read next
 

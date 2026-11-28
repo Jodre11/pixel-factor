@@ -1,0 +1,39 @@
+# The pixel-factor demo: Keycloak with the plugin, and the service. Development settings only: every secret here is
+# public. Start it with `make demo`; `make demo-smoke` checks it. See docs/keycloak.md, "Demo".
+name: ${PF_DEMO_PROJECT:-pixel-factor-demo}
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.2@sha256:7e66a96e4739239070aeaf72e4c5decf0f7f682cfc725b9f7ea2b336eaba38b3
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_SPI_AUTHENTICATOR__PIXEL_FACTOR__SERVICE_URL: http://service:8080
+      KC_SPI_AUTHENTICATOR__PIXEL_FACTOR__API_TOKEN: dev-token
+    volumes:
+      - ../target/pixel-factor-keycloak-0.1.0.jar:/opt/keycloak/providers/pixel-factor-keycloak.jar:ro
+      - ./realm.json:/opt/keycloak/data/import/realm.json:ro
+    ports:
+      - "${PF_DEMO_PUBLISH:-127.0.0.1:8080}:8080"
+    depends_on:
+      service:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+  service:
+    image: ${PF_SERVICE_IMAGE:?set PF_SERVICE_IMAGE to the image make image built}
+    environment:
+      PF_API_TOKEN: dev-token
+      PF_IMAGES: demo=0.75
+      PF_DEV_PEPPER_HEX: 6465762d6f6e6c792d7065707065722d6e6f742d666f722d70726f64756374696f6e
+    volumes:
+      - service-data:/data
+    # No published port: only Keycloak reaches the service, as docs/OPERATIONS.md expects.
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  service-data:

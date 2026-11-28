@@ -118,7 +118,7 @@ sequenceDiagram
     K-->>U: Signed in, or try again
 ```
 
-- **Keycloak** is the sign-in system. A small plugin shows the tap page and calls the service. It holds no secrets and does no cryptography. The plugin is planned, not built yet.
+- **Keycloak** is the sign-in system. A small plugin shows the tap page and calls the service. It holds no secrets and does no cryptography. See [keycloak.md](keycloak.md); `make demo` runs it.
 - **The service** ([service.md](service.md)) owns the records and the lockout, and runs the core library. It is meant for an internal network, reachable only by Keycloak.
 - **The core library** does the geometry, hashing and encryption, with no input or output of its own.
 - **The KMS** holds the pepper and performs the HMAC itself, so the key never leaves it. This is not built yet: development uses an in-memory stand-in, which is why nothing here should protect real accounts.
