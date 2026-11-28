@@ -19,7 +19,9 @@ updates:
     directory: /keycloak
     schedule:
       interval: weekly
-  # The demo's Keycloak image, pinned by digest.
+  # The demo's Keycloak image, pinned by digest. A Keycloak bump here and the keycloak.version bump in the maven
+  # entry above arrive as separate pull requests; make demo-smoke fails each until both carry the same release, so
+  # merge them as one change.
   - package-ecosystem: docker-compose
     directory: /keycloak/demo
     schedule:

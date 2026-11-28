@@ -46,7 +46,7 @@ Rules:
 
 | Component | Choice | Why |
 |---|---|---|
-| Keycloak | 26.8.2, the latest release | The SPIs used here are stable across 26.x. |
+| Keycloak | 26.8.2, the latest release | Keycloak marks all three SPIs used here (authenticator, required action, credential) as internal: they "may change without notice", and it logs `KC-SERVICES0047` for each at start. So any Keycloak release can break the plugin. `pom.xml` and the demo's `compose.yaml` pin the same release, `make demo-smoke` fails if they differ, and an upgrade moves both in one change, proven by `make demo-smoke`. |
 | Java | 21 | The JDK Keycloak 26 runs on. |
 | Build | Maven, run inside a `maven` container pinned by digest | No JDK is needed on the host, matching how the service image is built. |
 | Runtime dependencies | None beyond what Keycloak provides | `java.net.http` for HTTP, Keycloak's own Jackson for JSON. Nothing extra to vet or licence. |
