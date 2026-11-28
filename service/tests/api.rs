@@ -867,8 +867,16 @@ fn pending_enrolments_are_claimed_once_expire_and_are_pruned() {
         store.claim_pending("a", 150, 50).unwrap().is_none(),
         "claimed once"
     );
-    assert!(store.finish_pending("a", &claim).unwrap());
-    assert!(!store.finish_pending("a", &claim).unwrap(), "finished once");
+    store.release_pending("a", &claim).unwrap();
+    let (_, claim) = store
+        .claim_pending("a", 150, 50)
+        .unwrap()
+        .expect("a released claim can be claimed again");
+    assert!(store.remove_claimed_pending("a", &claim).unwrap());
+    assert!(
+        !store.remove_claimed_pending("a", &claim).unwrap(),
+        "removed once"
+    );
 
     store.put_pending("b", &record, 100).unwrap();
     assert!(
@@ -892,7 +900,7 @@ fn a_claim_is_void_after_deletion_or_restaging() {
     let (_, claim) = store.claim_pending("a", 100, 50).unwrap().unwrap();
     store.delete("a").unwrap();
     assert!(
-        !store.finish_pending("a", &claim).unwrap(),
+        !store.remove_claimed_pending("a", &claim).unwrap(),
         "a user deleted mid-confirmation stays deleted"
     );
 
@@ -900,11 +908,67 @@ fn a_claim_is_void_after_deletion_or_restaging() {
     let (_, claim) = store.claim_pending("b", 100, 50).unwrap().unwrap();
     store.put_pending("b", &record, 110).unwrap();
     assert!(
-        !store.finish_pending("b", &claim).unwrap(),
+        !store.remove_claimed_pending("b", &claim).unwrap(),
         "a newer staged enrolment wins"
     );
     assert!(
         store.claim_pending("b", 110, 50).unwrap().is_some(),
         "and can be confirmed itself"
     );
+}
+
+#[tokio::test]
+async fn a_failed_check_gives_the_confirmation_attempt_back() {
+    let dir = std::env::temp_dir().join(format!("pf-release-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("test.db");
+    let config = config_from(&env()).unwrap();
+    let kdf = KdfParams {
+        m_kib: 64,
+        t: 1,
+        p: 1,
+    };
+    let app = router(Arc::new(
+        App::new(&config, Store::open(&path).unwrap(), kdf).unwrap(),
+    ));
+    stage(&app, "bob", five()).await;
+
+    // A record the core refuses to verify: the check fails, not the taps.
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    let json: String = conn
+        .query_row(
+            "SELECT record FROM pending WHERE user_id = 'bob'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let mut record: Value = serde_json::from_str(&json).unwrap();
+    let good = record["version"].clone();
+    record["version"] = json!(99);
+    let set = |value: &Value| {
+        conn.execute(
+            "UPDATE pending SET record = ?1 WHERE user_id = 'bob'",
+            [value.to_string()],
+        )
+        .unwrap();
+    };
+    set(&record);
+    for _ in 0..2 {
+        let (status, _) = post(
+            &app,
+            "/v1/enrolments/confirm",
+            json!({"user_id": "bob", "taps": five()}),
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "the attempt is released, so a retry checks the record again"
+        );
+    }
+    record["version"] = good;
+    set(&record);
+    drop(conn);
+    assert_eq!(confirm(&app, "bob", five()).await["confirmed"], true);
+    std::fs::remove_dir_all(&dir).unwrap();
 }
