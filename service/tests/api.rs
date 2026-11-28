@@ -125,7 +125,7 @@ async fn unknown_users_look_like_known_ones() {
     enrol_alice(&app).await;
     let (status, known) = post(&app, "/v1/challenge", json!({"user_id": "alice"})).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(known, json!({"image_id": "harbour"}));
+    assert_eq!(known, json!({"image_id": "harbour", "max_taps": 8}));
 
     let (status, first) = post(&app, "/v1/challenge", json!({"user_id": "nobody"})).await;
     assert_eq!(status, StatusCode::OK);
@@ -133,6 +133,10 @@ async fn unknown_users_look_like_known_ones() {
     assert_eq!(first, again, "an unknown user's image is stable");
     let image = first["image_id"].as_str().unwrap();
     assert!(image == "harbour" || image == "meadow");
+    assert_eq!(
+        first["max_taps"], 8,
+        "the tap limit is the same for unknown users"
+    );
 
     assert_eq!(
         verify(&app, "nobody", five()).await,
@@ -656,4 +660,315 @@ async fn concurrent_attempts_cannot_exceed_the_limit() {
         verify(&app, "alice", five()).await,
         json!({"match": false, "locked": true})
     );
+}
+
+fn other() -> Value {
+    json!([
+        [0.15, 0.60],
+        [0.35, 0.50],
+        [0.55, 0.40],
+        [0.75, 0.30],
+        [0.85, 0.15]
+    ])
+}
+
+async fn stage(app: &Router, user: &str, taps: Value) {
+    let (status, body) = post(
+        app,
+        "/v1/enrolments",
+        json!({"user_id": user, "image_id": "harbour", "taps": taps}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+}
+
+async fn confirm(app: &Router, user: &str, taps: Value) -> Value {
+    let (status, body) = post(
+        app,
+        "/v1/enrolments/confirm",
+        json!({"user_id": user, "taps": taps}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    body
+}
+
+#[tokio::test]
+async fn a_staged_enrolment_replaces_the_record_only_once_confirmed() {
+    let app = app();
+    enrol_alice(&app).await;
+    stage(&app, "alice", other()).await;
+    assert_eq!(
+        verify(&app, "alice", five()).await["match"],
+        true,
+        "the old record stays live while the new one is pending"
+    );
+    assert_eq!(verify(&app, "alice", other()).await["match"], false);
+    assert_eq!(
+        confirm(&app, "alice", other()).await,
+        json!({"confirmed": true})
+    );
+    assert_eq!(verify(&app, "alice", other()).await["match"], true);
+    assert_eq!(verify(&app, "alice", five()).await["match"], false);
+}
+
+#[tokio::test]
+async fn a_first_enrolment_can_be_staged() {
+    let app = app();
+    stage(&app, "bob", five()).await;
+    assert_eq!(verify(&app, "bob", five()).await["match"], false);
+    assert_eq!(confirm(&app, "bob", five()).await["confirmed"], true);
+    assert_eq!(verify(&app, "bob", five()).await["match"], true);
+    let (_, body) = post(&app, "/v1/challenge", json!({"user_id": "bob"})).await;
+    assert_eq!(body["image_id"], "harbour");
+}
+
+#[tokio::test]
+async fn a_wrong_confirmation_discards_the_pending_enrolment() {
+    let app = app();
+    enrol_alice(&app).await;
+    stage(&app, "alice", other()).await;
+    assert_eq!(
+        confirm(&app, "alice", wrong()).await,
+        json!({"confirmed": false})
+    );
+    assert_eq!(
+        confirm(&app, "alice", other()).await,
+        json!({"confirmed": false}),
+        "one attempt only: the right taps after a wrong one do not confirm"
+    );
+    assert_eq!(verify(&app, "alice", five()).await["match"], true);
+    assert_eq!(verify(&app, "alice", other()).await["match"], false);
+}
+
+#[tokio::test]
+async fn confirming_with_nothing_pending_does_not_confirm() {
+    let app = app();
+    enrol_alice(&app).await;
+    assert_eq!(
+        confirm(&app, "alice", five()).await,
+        json!({"confirmed": false})
+    );
+    assert_eq!(
+        confirm(&app, "nobody", five()).await,
+        json!({"confirmed": false})
+    );
+}
+
+#[tokio::test]
+async fn restaging_replaces_the_pending_enrolment() {
+    let app = app();
+    stage(&app, "bob", five()).await;
+    stage(&app, "bob", other()).await;
+    assert_eq!(confirm(&app, "bob", other()).await["confirmed"], true);
+    assert_eq!(verify(&app, "bob", five()).await["match"], false);
+}
+
+#[tokio::test]
+async fn staging_leaves_a_lock_and_confirmation_clears_it() {
+    let app = app();
+    enrol_alice(&app).await;
+    for _ in 0..5 {
+        verify(&app, "alice", wrong()).await;
+    }
+    stage(&app, "alice", other()).await;
+    assert_eq!(
+        verify(&app, "alice", five()).await,
+        json!({"match": false, "locked": true}),
+        "staging alone does not clear a lock"
+    );
+    assert_eq!(confirm(&app, "alice", other()).await["confirmed"], true);
+    assert_eq!(
+        verify(&app, "alice", other()).await,
+        json!({"match": true, "locked": false})
+    );
+}
+
+#[tokio::test]
+async fn deleting_a_user_removes_their_pending_enrolment() {
+    let app = app();
+    stage(&app, "bob", five()).await;
+    let (status, _) = call(&app, "DELETE", "/v1/users/bob", None, Some(TOKEN)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(confirm(&app, "bob", five()).await["confirmed"], false);
+}
+
+#[tokio::test]
+async fn unacceptable_staged_enrolments_are_422_and_store_nothing() {
+    let app = app();
+    for body in [
+        json!({"user_id": "bob", "image_id": "nowhere", "taps": five()}),
+        json!({"user_id": "bob", "image_id": "harbour", "taps": [[0.1, 0.1], [0.3, 0.2]]}),
+        json!({"user_id": "", "image_id": "harbour", "taps": five()}),
+    ] {
+        let (status, answer) = post(&app, "/v1/enrolments", body.clone()).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+        assert!(answer["error"].is_string(), "{answer}");
+    }
+    assert_eq!(confirm(&app, "bob", five()).await["confirmed"], false);
+    let (status, _) = post(
+        &app,
+        "/v1/enrolments/confirm",
+        json!({"user_id": "", "taps": five()}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn staged_enrolment_needs_the_token() {
+    let app = app();
+    let body = json!({"user_id": "bob", "image_id": "harbour", "taps": five()});
+    let (status, _) = call(&app, "POST", "/v1/enrolments", Some(body), None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let body = json!({"user_id": "bob", "taps": five()});
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/v1/enrolments/confirm",
+        Some(body),
+        Some("nope"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_confirmations_get_one_attempt_between_them() {
+    let app = app();
+    stage(&app, "bob", five()).await;
+    let mut handles = Vec::new();
+    for _ in 0..8 {
+        let app = app.clone();
+        handles.push(tokio::spawn(
+            async move { confirm(&app, "bob", five()).await },
+        ));
+    }
+    let mut confirmed = 0;
+    for h in handles {
+        if h.await.unwrap()["confirmed"] == true {
+            confirmed += 1;
+        }
+    }
+    assert_eq!(confirmed, 1);
+}
+
+#[test]
+fn pending_enrolments_are_claimed_once_expire_and_are_pruned() {
+    let record = record();
+    let store = Store::open_in_memory().unwrap();
+    store.put_pending("a", &record, 100).unwrap();
+    let (got, claim) = store
+        .claim_pending("a", 150, 50)
+        .unwrap()
+        .expect("exactly at the expiry edge it can still be claimed");
+    assert_eq!(got, record);
+    assert!(
+        store.claim_pending("a", 150, 50).unwrap().is_none(),
+        "claimed once"
+    );
+    store.release_pending("a", &claim).unwrap();
+    let (_, claim) = store
+        .claim_pending("a", 150, 50)
+        .unwrap()
+        .expect("a released claim can be claimed again");
+    assert!(store.remove_claimed_pending("a", &claim).unwrap());
+    assert!(
+        !store.remove_claimed_pending("a", &claim).unwrap(),
+        "removed once"
+    );
+
+    store.put_pending("b", &record, 100).unwrap();
+    assert!(
+        store.claim_pending("b", 151, 50).unwrap().is_none(),
+        "expired"
+    );
+
+    store.put_pending("old", &record, 100).unwrap();
+    store.put_pending("new", &record, 180).unwrap();
+    assert_eq!(store.prune_pending(200, 50).unwrap(), 2, "old and b");
+    assert!(store.claim_pending("new", 200, 50).unwrap().is_some());
+    assert!(store.get("new").unwrap().is_none(), "pending is not live");
+}
+
+#[test]
+fn a_claim_is_void_after_deletion_or_restaging() {
+    let record = record();
+    let store = Store::open_in_memory().unwrap();
+
+    store.put_pending("a", &record, 100).unwrap();
+    let (_, claim) = store.claim_pending("a", 100, 50).unwrap().unwrap();
+    store.delete("a").unwrap();
+    assert!(
+        !store.remove_claimed_pending("a", &claim).unwrap(),
+        "a user deleted mid-confirmation stays deleted"
+    );
+
+    store.put_pending("b", &record, 100).unwrap();
+    let (_, claim) = store.claim_pending("b", 100, 50).unwrap().unwrap();
+    store.put_pending("b", &record, 110).unwrap();
+    assert!(
+        !store.remove_claimed_pending("b", &claim).unwrap(),
+        "a newer staged enrolment wins"
+    );
+    assert!(
+        store.claim_pending("b", 110, 50).unwrap().is_some(),
+        "and can be confirmed itself"
+    );
+}
+
+#[tokio::test]
+async fn a_failed_check_gives_the_confirmation_attempt_back() {
+    let dir = std::env::temp_dir().join(format!("pf-release-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("test.db");
+    let config = config_from(&env()).unwrap();
+    let kdf = KdfParams {
+        m_kib: 64,
+        t: 1,
+        p: 1,
+    };
+    let app = router(Arc::new(
+        App::new(&config, Store::open(&path).unwrap(), kdf).unwrap(),
+    ));
+    stage(&app, "bob", five()).await;
+
+    // A record the core refuses to verify: the check fails, not the taps.
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    let json: String = conn
+        .query_row(
+            "SELECT record FROM pending WHERE user_id = 'bob'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let mut record: Value = serde_json::from_str(&json).unwrap();
+    let good = record["version"].clone();
+    record["version"] = json!(99);
+    let set = |value: &Value| {
+        conn.execute(
+            "UPDATE pending SET record = ?1 WHERE user_id = 'bob'",
+            [value.to_string()],
+        )
+        .unwrap();
+    };
+    set(&record);
+    for _ in 0..2 {
+        let (status, _) = post(
+            &app,
+            "/v1/enrolments/confirm",
+            json!({"user_id": "bob", "taps": five()}),
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "the attempt is released, so a retry checks the record again"
+        );
+    }
+    record["version"] = good;
+    set(&record);
+    drop(conn);
+    assert_eq!(confirm(&app, "bob", five()).await["confirmed"], true);
+    std::fs::remove_dir_all(&dir).unwrap();
 }

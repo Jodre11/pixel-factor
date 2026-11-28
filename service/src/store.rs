@@ -2,7 +2,8 @@
 //!
 //! Records live in `users`. Failure counts live in `failures`, keyed by user
 //! id whether or not the user exists, so lockout behaves the same for unknown
-//! ids and does not reveal which ids are real.
+//! ids and does not reveal which ids are real. Enrolments waiting for
+//! confirmation live in `pending`, at most one per user id.
 
 use pixel_factor_core::Record;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -74,7 +75,15 @@ impl Store {
                  locked_until INTEGER NOT NULL,
                  last_failure INTEGER NOT NULL
              );
-             CREATE INDEX IF NOT EXISTS failures_by_age ON failures (last_failure);",
+             CREATE INDEX IF NOT EXISTS failures_by_age ON failures (last_failure);
+             CREATE TABLE IF NOT EXISTS pending (
+                 user_id TEXT PRIMARY KEY,
+                 record  TEXT NOT NULL,
+                 created INTEGER NOT NULL,
+                 nonce   TEXT NOT NULL,
+                 claimed INTEGER NOT NULL
+             );
+             CREATE INDEX IF NOT EXISTS pending_by_age ON pending (created);",
         )?;
         Ok(Self { conn })
     }
@@ -105,11 +114,82 @@ impl Store {
         self.clear_failures(user_id)
     }
 
-    /// Remove a user and their failures. Not an error if there is none.
+    /// Remove a user, their failures and any pending enrolment. Not an error
+    /// if there is none.
     pub fn delete(&self, user_id: &str) -> Result<(), StoreError> {
         self.conn
             .execute("DELETE FROM users WHERE user_id = ?1", params![user_id])?;
+        self.conn
+            .execute("DELETE FROM pending WHERE user_id = ?1", params![user_id])?;
         self.clear_failures(user_id)
+    }
+
+    /// Store an enrolment waiting for confirmation, replacing any earlier one.
+    /// The live record and failures are untouched.
+    pub fn put_pending(&self, user_id: &str, record: &Record, now: u64) -> Result<(), StoreError> {
+        let json = serde_json::to_string(record)?;
+        let mut nonce = [0u8; 16];
+        getrandom::fill(&mut nonce).map_err(|e| StoreError(format!("random nonce: {e}")))?;
+        self.conn.execute(
+            "INSERT INTO pending (user_id, record, created, nonce, claimed) VALUES (?1, ?2, ?3, ?4, 0)
+             ON CONFLICT (user_id) DO UPDATE SET record = ?2, created = ?3, nonce = ?4, claimed = 0",
+            params![user_id, json, to_i64(now), hex::encode(nonce)],
+        )?;
+        Ok(())
+    }
+
+    /// Claim the pending enrolment for one confirmation attempt, if one was
+    /// stored within the last `ttl_secs` and is not already claimed. Returns
+    /// the record and a claim to pass to [`Store::remove_claimed_pending`] or [`Store::release_pending`]. Atomic, so
+    /// of several concurrent callers only one gets it.
+    pub fn claim_pending(
+        &self,
+        user_id: &str,
+        now: u64,
+        ttl_secs: u64,
+    ) -> Result<Option<(Record, String)>, StoreError> {
+        let row: Option<(String, String)> = self
+            .conn
+            .query_row(
+                "UPDATE pending SET claimed = 1
+                 WHERE user_id = ?1 AND claimed = 0 AND created >= ?2
+                 RETURNING record, nonce",
+                params![user_id, to_i64(now.saturating_sub(ttl_secs))],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        row.map(|(json, nonce)| Ok((serde_json::from_str(&json)?, nonce)))
+            .transpose()
+    }
+
+    /// End a claim by removing the pending enrolment it was made on. Returns
+    /// false when that enrolment is already gone, because the user was deleted
+    /// or enrolment was staged again since the claim: the caller must then not
+    /// make it live.
+    pub fn remove_claimed_pending(&self, user_id: &str, claim: &str) -> Result<bool, StoreError> {
+        let removed = self.conn.execute(
+            "DELETE FROM pending WHERE user_id = ?1 AND nonce = ?2",
+            params![user_id, claim],
+        )?;
+        Ok(removed > 0)
+    }
+
+    /// Give a claim back unused, so the enrolment can be confirmed again. For
+    /// when checking the taps failed for a reason that is not the taps.
+    pub fn release_pending(&self, user_id: &str, claim: &str) -> Result<(), StoreError> {
+        self.conn.execute(
+            "UPDATE pending SET claimed = 0 WHERE user_id = ?1 AND nonce = ?2",
+            params![user_id, claim],
+        )?;
+        Ok(())
+    }
+
+    /// Drop pending enrolments older than `ttl_secs`.
+    pub fn prune_pending(&self, now: u64, ttl_secs: u64) -> Result<usize, StoreError> {
+        Ok(self.conn.execute(
+            "DELETE FROM pending WHERE created < ?1",
+            params![to_i64(now.saturating_sub(ttl_secs))],
+        )?)
     }
 
     /// Failures for `user_id` that are still inside the window.

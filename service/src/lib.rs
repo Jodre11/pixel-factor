@@ -45,6 +45,9 @@ pub const MAX_BODY: usize = 16 * 1024;
 /// Longest user id accepted, in bytes.
 pub const MAX_USER_ID_LEN: usize = 255;
 
+/// How long a pending enrolment waits for its confirmation, in seconds.
+pub const PENDING_TTL_SECS: u64 = 600;
+
 const DOMAIN_CHALLENGE: &[u8] = b"pfsvc/challenge";
 
 /// The commit the binary was built from, when the build set `PF_BUILD_COMMIT`.
@@ -93,6 +96,7 @@ pub struct App {
     token_mac: [u8; 32],
     lockout: Lockout,
     kdf: KdfParams,
+    max_taps: usize,
     work: Semaphore,
 }
 
@@ -105,7 +109,15 @@ impl App {
         getrandom::fill(&mut token_key).map_err(|e| format!("random key: {e}"))?;
         let token_mac = token_mac(&token_key, &config.api_token).ok_or("token key rejected")?;
         let mut decoys = BTreeMap::new();
+        let mut max_taps = None;
         for (id, aspect) in &config.images {
+            // Clients pad every submission to max_taps, so it must be one value
+            // for every image or the padded length would reveal the image.
+            let limit = policy(*aspect, kdf).max_taps;
+            if max_taps.is_some_and(|m| m != limit) {
+                return Err(format!("image '{id}' has a different tap limit"));
+            }
+            max_taps = Some(limit);
             let record = enrol(&decoy_taps(*aspect), id, &policy(*aspect, kdf), &pepper)
                 .map_err(|e| format!("decoy record for image '{id}': {e}"))?
                 .record;
@@ -120,8 +132,22 @@ impl App {
             token_mac,
             lockout: config.lockout,
             kdf,
+            max_taps: max_taps.ok_or("no images configured")?,
             work: Semaphore::new(config.max_concurrent),
         })
+    }
+
+    /// Run one full verification against the decoy for `user_id`'s image and
+    /// discard the result, so a path with no record costs the same as one with.
+    fn verify_decoy(&self, user_id: &str, taps: &[Point]) -> Result<(), ApiError> {
+        let image = self.decoy_image(user_id)?;
+        let decoy = self
+            .decoys
+            .get(image)
+            .ok_or_else(|| ApiError::Internal("missing decoy".to_owned()))?;
+        // The decoy's taps are public, so its result must never count.
+        let _ = verify(taps, decoy, self.pepper.as_ref())?;
+        Ok(())
     }
 
     /// The image an unknown user is shown: stable for the id, unpredictable
@@ -176,6 +202,8 @@ pub fn router(app: Arc<App>) -> Router {
     let v1 = Router::new()
         .route("/v1/challenge", post(challenge))
         .route("/v1/enrol", post(enrol_user))
+        .route("/v1/enrolments", post(stage_enrolment))
+        .route("/v1/enrolments/confirm", post(confirm_enrolment))
         .route("/v1/verify", post(verify_user))
         .route("/v1/users/{user_id}", delete(delete_user))
         .route_layer(middleware::from_fn_with_state(app.clone(), require_token));
@@ -230,6 +258,7 @@ struct ChallengeRequest {
 #[derive(Serialize)]
 struct ChallengeAnswer {
     image_id: String,
+    max_taps: usize,
 }
 
 async fn challenge(
@@ -247,7 +276,10 @@ async fn challenge(
         }
     })
     .await?;
-    Ok(Json(ChallengeAnswer { image_id }))
+    Ok(Json(ChallengeAnswer {
+        image_id,
+        max_taps: app.max_taps,
+    }))
 }
 
 #[derive(Deserialize)]
@@ -263,9 +295,32 @@ struct EnrolAnswer {
     warnings: Vec<String>,
 }
 
+/// Where a new enrolment goes: straight to the live record, or to the pending
+/// slot to wait for confirmation.
+#[derive(Clone, Copy)]
+enum Target {
+    Live,
+    Pending,
+}
+
 async fn enrol_user(
     State(app): State<Arc<App>>,
     Json(req): Json<EnrolRequest>,
+) -> Result<(StatusCode, Json<EnrolAnswer>), ApiError> {
+    enrol_into(app, req, Target::Live).await
+}
+
+async fn stage_enrolment(
+    State(app): State<Arc<App>>,
+    Json(req): Json<EnrolRequest>,
+) -> Result<(StatusCode, Json<EnrolAnswer>), ApiError> {
+    enrol_into(app, req, Target::Pending).await
+}
+
+async fn enrol_into(
+    app: Arc<App>,
+    req: EnrolRequest,
+    target: Target,
 ) -> Result<(StatusCode, Json<EnrolAnswer>), ApiError> {
     check_user_id(&req.user_id)?;
     let Some(aspect) = app.images.get(&req.image_id).copied() else {
@@ -285,12 +340,94 @@ async fn enrol_user(
             &policy(aspect, app2.kdf),
             app2.pepper.as_ref(),
         )?;
-        lock(&app2.store)?.put(&req.user_id, &enrolment.record)?;
-        tracing::info!(user_id = ?req.user_id, image_id = ?req.image_id, "enrolled");
+        let store = lock(&app2.store)?;
+        match target {
+            Target::Live => {
+                store.put(&req.user_id, &enrolment.record)?;
+                tracing::info!(user_id = ?req.user_id, image_id = ?req.image_id, "enrolled");
+            }
+            Target::Pending => {
+                let now = unix_now();
+                store.put_pending(&req.user_id, &enrolment.record, now)?;
+                // Staging is the only way rows are added, so pruning here
+                // bounds the table without a background task.
+                store.prune_pending(now, PENDING_TTL_SECS)?;
+                tracing::info!(user_id = ?req.user_id, image_id = ?req.image_id, "enrolment staged");
+            }
+        }
         Ok(enrolment.warnings.iter().map(describe).collect())
     })
     .await?;
     Ok((StatusCode::CREATED, Json(EnrolAnswer { warnings })))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConfirmRequest {
+    user_id: String,
+    taps: Vec<[f64; 2]>,
+}
+
+/// The answer to a confirmation.
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConfirmAnswer {
+    /// The taps matched the pending enrolment, which is now the live record.
+    pub confirmed: bool,
+}
+
+/// The pending enrolment is claimed before its taps are checked, so it gets
+/// exactly one confirmation attempt, even under concurrent requests. A wrong
+/// one leaves nothing to guess against.
+async fn confirm_enrolment(
+    State(app): State<Arc<App>>,
+    Json(req): Json<ConfirmRequest>,
+) -> Result<Json<ConfirmAnswer>, ApiError> {
+    check_user_id(&req.user_id)?;
+    let _permit = app
+        .work
+        .acquire()
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let app2 = app.clone();
+    let confirmed =
+        blocking(move || confirm_blocking(&app2, &req.user_id, &points(&req.taps))).await?;
+    Ok(Json(ConfirmAnswer { confirmed }))
+}
+
+/// Every path runs one full verification, against the pending enrolment or a
+/// decoy, so the time taken does not show whether anything was pending.
+///
+/// The store is unlocked while the taps are checked. Finishing the claim and
+/// making the record live then happen under one lock, so a deletion or a new
+/// staged enrolment in between wins and is never overwritten.
+fn confirm_blocking(app: &App, user_id: &str, taps: &[Point]) -> Result<bool, ApiError> {
+    let claimed = lock(&app.store)?.claim_pending(user_id, unix_now(), PENDING_TTL_SECS)?;
+    let Some((record, claim)) = claimed else {
+        app.verify_decoy(user_id, taps)?;
+        tracing::info!(user_id = ?user_id, outcome = "none_pending", "enrolment confirmation");
+        return Ok(false);
+    };
+    let matched = match verify(taps, &record, app.pepper.as_ref()) {
+        Ok(matched) => matched,
+        Err(e) => {
+            // A pepper failure says nothing about the taps: give the attempt back.
+            lock(&app.store)?.release_pending(user_id, &claim)?;
+            return Err(e.into());
+        }
+    };
+    let store = lock(&app.store)?;
+    let claim_still_held = store.remove_claimed_pending(user_id, &claim)?;
+    if !matched {
+        tracing::info!(user_id = ?user_id, outcome = "no_match", "enrolment confirmation");
+        return Ok(false);
+    }
+    if !claim_still_held {
+        tracing::info!(user_id = ?user_id, outcome = "superseded", "enrolment confirmation");
+        return Ok(false);
+    }
+    store.put(user_id, &record)?;
+    tracing::info!(user_id = ?user_id, image_id = ?record.image_id, outcome = "confirmed", "enrolled");
+    Ok(true)
 }
 
 fn describe(warning: &Warning) -> String {
@@ -361,13 +498,7 @@ fn verify_blocking(app: &App, user_id: &str, taps: &[Point]) -> Result<VerifyAns
     let matched = match &record {
         Some(record) => verify(taps, record, app.pepper.as_ref())?,
         None => {
-            let image = app.decoy_image(user_id)?;
-            let decoy = app
-                .decoys
-                .get(image)
-                .ok_or_else(|| ApiError::Internal("missing decoy".to_owned()))?;
-            // The decoy's taps are public, so its result must never count.
-            let _ = verify(taps, decoy, app.pepper.as_ref())?;
+            app.verify_decoy(user_id, taps)?;
             false
         }
     };
