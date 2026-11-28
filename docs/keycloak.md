@@ -19,7 +19,7 @@ Status: built; `make demo` runs it. This is step 3 of the build order in [spec.m
 
 Two pull requests, in order:
 
-1. **Service: staged enrolment and the tap limit.** The changes under "Service changes" below. Small, Rust only, and useful to every adapter, including the OIDC host in spec section 17 step 4.
+1. **Service: staged enrolment and the tap limit.** The changes under "Service changes" below. Small, Rust only, and useful to every adapter.
 2. **The plugin and the demo**, on top of it.
 
 ## Service changes
