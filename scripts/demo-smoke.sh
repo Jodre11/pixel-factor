@@ -27,6 +27,17 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# The plugin compiles against one Keycloak version and the demo runs another image; they must be the same release,
+# because the SPIs the plugin uses are internal to Keycloak and may change between releases. Dependabot updates the
+# two in separate pull requests, so this check fails the one that moves first.
+built="$(sed -n 's:.*<keycloak.version>\(.*\)</keycloak.version>.*:\1:p' "$root/keycloak/pom.xml")"
+running="$(sed -n 's|.*quay.io/keycloak/keycloak:\([^@]*\)@.*|\1|p' "$compose_file")"
+if [[ -z "$built" || "$built" != "$running" ]]; then
+    echo "demo-smoke: pom.xml builds against Keycloak '$built' but compose.yaml runs '$running'; move them together" >&2
+    exit 1
+fi
+echo "ok  plugin and demo use Keycloak $built"
+
 compose up -d --quiet-pull
 port="$(compose port keycloak 8080 | sed 's/.*://')"
 base="http://127.0.0.1:$port"
