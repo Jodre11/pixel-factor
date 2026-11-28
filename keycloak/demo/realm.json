@@ -8,6 +8,7 @@
   "otpPolicyAlgorithm": "HmacSHA1",
   "otpPolicyDigits": 6,
   "otpPolicyPeriod": 30,
+  "otpPolicyLookAheadWindow": 1,
   "requiredActions": [
     {
       "alias": "pixel-factor-enrol",
@@ -82,12 +83,33 @@
       "emailVerified": true,
       "firstName": "Demo",
       "lastName": "User",
-      "requiredActions": ["pixel-factor-enrol"],
+      "requiredActions": [
+        "pixel-factor-enrol"
+      ],
       "credentials": [
         {
           "type": "otp",
           "userLabel": "Demo authenticator",
           "secretData": "{\"value\":\"public-demo-otp-not-a-secret\"}",
+          "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\"}"
+        }
+      ]
+    },
+    {
+      "username": "browser",
+      "enabled": true,
+      "email": "browser@example.invalid",
+      "emailVerified": true,
+      "firstName": "Browser",
+      "lastName": "Test",
+      "requiredActions": [
+        "pixel-factor-enrol"
+      ],
+      "credentials": [
+        {
+          "type": "otp",
+          "userLabel": "Browser test authenticator",
+          "secretData": "{\"value\":\"public-browser-otp-not-a-secret\"}",
           "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\"}"
         }
       ]

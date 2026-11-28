@@ -25,7 +25,7 @@ MAVEN = docker run --rm -v "$(CURDIR)/keycloak:/src" -v pixel-factor-m2:/root/.m
 
 .PHONY: help setup tools-deep check check-changed fmt fmt-check lint test doc \
 	docs-check deny shellcheck fuzz-check advisories coverage mutants fuzz kat timing serve smoke image container-smoke iac-scan image-scan \
-	plugin-check plugin-fmt plugin-jar demo demo-smoke
+	plugin-check plugin-fmt plugin-jar demo demo-tunnel demo-stop demo-smoke
 
 help: ## List the available commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | sort
@@ -125,5 +125,11 @@ plugin-jar: ## Build the Keycloak plugin jar into keycloak/target (needs Docker)
 demo: plugin-jar image ## Start Keycloak with the plugin and the service; print the login URL and one-time code secret
 	scripts/demo.sh $(IMAGE)
 
-demo-smoke: plugin-jar image ## Start the demo on a free port and check it end to end through Keycloak's pages
+demo-tunnel: plugin-jar image ## As demo, plus a public HTTPS address through a Cloudflare quick tunnel, for phones
+	scripts/demo.sh $(IMAGE) --tunnel
+
+demo-stop: ## Stop the demo started by demo or demo-tunnel, and delete its data
+	scripts/demo.sh $(IMAGE) --stop
+
+demo-smoke: plugin-jar image ## Start the demo on a free port; log in through Keycloak's pages, then in Chromium
 	scripts/demo-smoke.sh $(IMAGE)

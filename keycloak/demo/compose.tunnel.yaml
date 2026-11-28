@@ -1,0 +1,19 @@
+# Adds a Cloudflare quick tunnel to the demo, so a phone or another person can reach it over HTTPS at a random
+# trycloudflare.com address. No Cloudflare account; the address lasts until the tunnel stops. `make demo-tunnel`
+# layers this on compose.yaml. The demo's secrets are public, so use throwaway accounts only. See docs/keycloak.md.
+services:
+  keycloak:
+    environment:
+      # The tunnel terminates HTTPS; Keycloak takes the scheme and host from its forwarded headers.
+      KC_PROXY_HEADERS: xforwarded
+      # Reachable from the internet, so not admin/admin. scripts/demo.sh generates it and prints it.
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${PF_DEMO_ADMIN_PASSWORD:?scripts/demo.sh sets PF_DEMO_ADMIN_PASSWORD}
+
+  tunnel:
+    image: cloudflare/cloudflared:2026.11.2@sha256:55c7e3e8d89d5e8d20b75a82f3602cbf98e06db406e73e282073cfdc5a9a3af6
+    command: ["tunnel", "--no-autoupdate", "--url", "http://keycloak:8080"]
+    depends_on:
+      - keycloak
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
