@@ -13,6 +13,8 @@ A change to the stored record format is always called out here, with the new `RE
 
 ### Added
 
+- **Browser smoke test** for the Keycloak demo: Chromium, through Playwright, enrols by clicking on a desktop viewport, is refused a wrong sequence and accepts the right one on an emulated phone, and accepts a sequence placed by keyboard alone. Part of `make demo-smoke`, so it runs in CI.
+- **`make demo-tunnel`** serves the demo at a public HTTPS address through a Cloudflare quick tunnel, to try it on a phone; `make demo-stop` stops either demo.
 - **Keycloak plugin** `pixel-factor-keycloak`: a tap step for the browser flow, an enrolment required action (enter, then repeat, through the service's staged enrolment) and a marker credential. Both refuse to run until a passkey or one-time code has succeeded in the same login. The tap page pads every submission to `max_taps`. `make demo` starts Keycloak and the service in Docker; `make demo-smoke` logs in through Keycloak's pages in CI.
 - **Staged enrolment** in the service: `POST /v1/enrolments` stores a pending enrolment without touching the live record, and `POST /v1/enrolments/confirm` makes it live only if the user repeats the taps. One confirmation attempt; pending enrolments expire after 10 minutes. `/v1/challenge` now also returns `max_taps`, so a client can pad every submission to the same length.
 - `pixel-factor-service` 0.1: an HTTP API (challenge, enrol, verify, delete, health, version) over axum and SQLite, configured from the environment. Unknown user ids are indistinguishable from real ones in answers, timing and lockout. Lockout is exponential and expires. Development pepper only. `make serve` runs it locally and `make smoke` drives it end to end; CI runs the smoke test.

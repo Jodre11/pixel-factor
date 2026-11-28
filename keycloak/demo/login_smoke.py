@@ -33,9 +33,9 @@ def fail(message) -> NoReturn:
     sys.exit(1)
 
 
-def totp(counter):
+def totp(counter, secret=OTP_SECRET):
     """RFC 6238 code, SHA-1, 6 digits, 30 s, as the demo realm's OTP policy."""
-    digest = hmac.new(OTP_SECRET, struct.pack(">Q", counter), hashlib.sha1).digest()
+    digest = hmac.new(secret, struct.pack(">Q", counter), hashlib.sha1).digest()
     offset = digest[-1] & 0x0F
     code = (struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF) % 1_000_000
     return f"{code:06d}"
@@ -98,13 +98,16 @@ def expect(page, fragment, step):
     print(f"ok  {step}")
 
 
-def through_possession(browser, counter):
+def through_possession(browser):
+    """Log in as far as the tap step. Returns the page and the time window whose code was used."""
     _, page = browser.start_login()
     expect(page, 'name="username"', "username page")
     _, page = browser.post(action(page), {"username": "demo"})
     expect(page, 'name="otp"', "one-time code page")
+    # Computed at the last moment: a code from a window that has just ended is refused.
+    counter = int(time.time()) // 30
     _, page = browser.post(action(page), {"otp": totp(counter)})
-    return page
+    return page, counter
 
 
 def max_taps(page):
@@ -120,8 +123,7 @@ def main():
     base = sys.argv[1]
 
     browser = Browser(base)
-    used = int(time.time()) // 30
-    page = through_possession(browser, used)
+    page, used = through_possession(browser)
     expect(page, 'id="pf-stage"', "enrolment tap page after the code")
     image = re.search(r'src="([^"]+/img/demo\.svg)"', page)
     if not image:
@@ -141,7 +143,7 @@ def main():
     while int(time.time()) // 30 <= used:
         time.sleep(1)
     browser = Browser(base)
-    page = through_possession(browser, int(time.time()) // 30)
+    page, _ = through_possession(browser)
     expect(page, 'id="pf-stage"', "login tap page after the code")
     slots = max_taps(page)
     _, page = browser.post(action(page), {"taps": field(WRONG, slots)})

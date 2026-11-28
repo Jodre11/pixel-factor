@@ -173,7 +173,15 @@ A `docker compose` file in `keycloak/demo/` runs:
 - `keycloak`: the official Keycloak image pinned by digest, in development mode, with the plugin jar mounted and a realm imported from `realm.json`.
 - `service`: the image from the repository `Dockerfile`, with development settings and a fresh volume.
 
-The realm has the flow above with OTP as the possession factor, and one user whose OTP credential is part of the import. The demo prints its secret, to add to an authenticator app. The user enrols taps on first login, after the one-time code. Only Keycloak's port is published; the service is reachable only from Keycloak on the compose network, as [OPERATIONS.md](OPERATIONS.md) expects.
+The realm has the flow above with OTP as the possession factor, and two users whose OTP credentials are part of the import: `demo`, for people, and `browser`, for the browser smoke test, each with its own secret. The demo prints `demo`'s secret, to add to an authenticator app. A user enrols taps on first login, after the one-time code. The realm accepts a code from the window either side of the current one (`otpPolicyLookAheadWindow: 1`, the value Keycloak's console uses for a new realm; an imported realm otherwise gets 0, and then a code that ages out between being read and being submitted is refused). Only Keycloak's port is published; the service is reachable only from Keycloak on the compose network, as [OPERATIONS.md](OPERATIONS.md) expects.
+
+### On a phone, or for someone else
+
+`make demo-tunnel` starts the same demo with a third container, `cloudflared`, which opens a Cloudflare quick tunnel and prints a random `https://*.trycloudflare.com` address. No Cloudflare account is needed, and the address lasts until the demo stops. It is the way to test enrolling on a desktop and logging in on a phone (spec section 17).
+
+- Keycloak takes the public scheme and host from the tunnel's forwarded headers (`KC_PROXY_HEADERS=xforwarded`, in `compose.tunnel.yaml`).
+- The admin password is random for each run and printed, because the admin console is reachable from the internet. Everything else stays public: the OTP secrets are committed and the pepper is the development one. Anyone with the address can sign in as `demo`. Use it for throwaway demonstrations only, and stop it afterwards with `make demo-stop`.
+- Quick tunnels carry no uptime guarantee and fall under Cloudflare's terms of use. A network that blocks `trycloudflare.com` stops the tunnel from starting; the command then prints the tunnel's log and leaves the local demo running.
 
 ## Commands
 
@@ -185,16 +193,18 @@ New Makefile targets, all running Maven inside the pinned container:
 | `plugin-fmt` | Format the plugin's Java code. |
 | `plugin-jar` | Build the jar into `keycloak/target`. |
 | `demo` | Build the jar and the service image, start the compose stack, print the login URL and the OTP secret. |
-| `demo-smoke` | Start the stack on a free port; check that Keycloak loaded the providers and imported the realm; from inside the network, drive the service calls the plugin uses (challenge, staged enrolment, confirmation, verify, delete); check the demo image's aspect; then log in through Keycloak's own pages with a generated one-time code: enrol, confirm, fail with a wrong sequence, succeed with the right one, and check that re-enrolment asks for a fresh login; stop it. |
+| `demo-tunnel` | As `demo`, plus a public HTTPS address through a Cloudflare quick tunnel and a random admin password. |
+| `demo-stop` | Stop the stack started by either, and delete its data. |
+| `demo-smoke` | Start the stack on a free port; check that Keycloak loaded the providers and imported the realm; from inside the network, drive the service calls the plugin uses (challenge, staged enrolment, confirmation, verify, delete); check the demo image's aspect; then log in through Keycloak's own pages with a generated one-time code: enrol, confirm, fail with a wrong sequence, succeed with the right one, and check that re-enrolment asks for a fresh login; then the browser smoke test below; stop it. |
 
-`make check` stays Rust-only and offline. Maven needs the network the first time it fetches Keycloak's jars, which would break that promise; the plugin targets are separate, and CI runs `plugin-check` and `demo-smoke` on every pull request. Dependabot gains the `maven` and `docker-compose` ecosystems.
+`make check` stays Rust-only and offline. Maven needs the network the first time it fetches Keycloak's jars, which would break that promise; the plugin targets are separate, and CI runs `plugin-check` and `demo-smoke` on every pull request. Dependabot gains the `maven` and `docker-compose` ecosystems, and `docker` and `pip` for the browser smoke test's image.
 
 ## Testing
 
 - **Service** (pull request 1): the staged enrolment rules above, each as a test in `service/tests/api.rs`, and the new calls added to `scripts/smoke.sh`.
 - **Plugin unit tests** (JUnit 5, Mockito for Keycloak's context objects): the possession gate passes only on a listed provider with `SUCCESS` and fails closed otherwise, including `SETUP_REQUIRED`; every service outcome, including each error in "Service errors", maps to the right flow result; nothing yields success on an error; the tap parser turns any bad input into an empty sequence; enrolment calls the service in order and writes the marker only after a confirmation; re-enrolment updates the marker rather than replacing it.
 - **Demo smoke**, as above. It exercises `HttpServiceClient`'s calls against the real service image, and the plugin inside Keycloak through `keycloak/demo/login_smoke.py`, which posts the taps field as the page's script builds it.
-- **Next step, not in this one**: a Playwright test that taps the image in a real browser, so `pixel-factor-tap.js` itself is exercised.
+- **Browser smoke**: `keycloak/demo/browser_smoke.py` drives Chromium through Playwright, so `pixel-factor-tap.js` itself runs. As the `browser` user, in three fresh browser contexts: enrol on a desktop viewport by clicking, using Undo and Clear on the way; on an emulated phone (touch, narrow image), have a wrong sequence refused and the right one accepted; then place the sequence with the arrow keys and Enter alone. Every submission is checked to carry a taps field of the same fixed length. It runs in an image built from `keycloak/demo/browser/Dockerfile` (Playwright's image, pinned by digest, plus the Python package locked by hash in `requirements.txt`), sharing Keycloak's network namespace so it browses `http://localhost:8080`: Chromium sends Keycloak's `Secure` cookies over plain HTTP only to a loopback address. A failing step saves a screenshot to `target/browser-smoke/`, which CI keeps as an artefact.
 
 ## Assumptions
 

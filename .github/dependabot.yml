@@ -26,3 +26,13 @@ updates:
     directory: /keycloak/demo
     schedule:
       interval: weekly
+  # The browser smoke test: the Playwright image and the playwright Python package. They must name the same release;
+  # make demo-smoke fails until both do, so merge the two pull requests as one change.
+  - package-ecosystem: docker
+    directory: /keycloak/demo/browser
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /keycloak/demo/browser
+    schedule:
+      interval: weekly

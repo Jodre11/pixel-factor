@@ -118,6 +118,15 @@ jobs:
       - name: Check the plugin
         run: make plugin-check
 
-      # Keycloak and the service in compose, then a login through Keycloak's own pages.
+      # Keycloak and the service in compose, then a login through Keycloak's own pages: by form posts, then in
+      # Chromium (desktop, emulated phone, keyboard).
       - name: Smoke test the demo
         run: make demo-smoke
+
+      - name: Keep screenshots of a failed browser test
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-smoke
+          path: target/browser-smoke/
+          if-no-files-found: ignore

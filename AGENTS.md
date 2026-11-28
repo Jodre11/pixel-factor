@@ -34,7 +34,9 @@ Everything goes through the Makefile. `make help` lists the targets.
 | `make plugin-check` | Keycloak plugin: format check, compile with warnings as errors, unit tests. Needs Docker. |
 | `make plugin-fmt` | Format the plugin's Java code. Needs Docker. |
 | `make demo` | Start Keycloak with the plugin and the service in Docker. Prints the login URL and the one-time code secret. |
-| `make demo-smoke` | Start the demo on a free port, log in through Keycloak's pages, stop it. |
+| `make demo-tunnel` | As `make demo`, plus a public HTTPS address through a Cloudflare quick tunnel, to try it on a phone. Throwaway accounts only. |
+| `make demo-stop` | Stop the demo started by `make demo` or `make demo-tunnel`, and delete its data. |
+| `make demo-smoke` | Start the demo on a free port, log in through Keycloak's pages and then in a real browser (desktop, emulated phone, keyboard), stop it. |
 | `make iac-scan` | Trivy misconfiguration scan of the `Dockerfile` and workflows. |
 | `make image-scan` | Trivy vulnerability scan of the built image. |
 
@@ -83,7 +85,7 @@ If a gate blocks a change you believe is right, fix the code or raise it. Do not
 | `docs/THREAT-MODEL.md` | Attackers, protections, known limits, operator duties. |
 | `docs/FAQ.md` | Short answers to common review questions. |
 | `keycloak/` | Keycloak plugin `pixel-factor-keycloak`, Java and Maven. Glue only: no cryptography or geometry. See `docs/keycloak.md`. |
-| `keycloak/demo/` | The Docker Compose demo: realm import, login smoke test and the demo image's drawing script. |
+| `keycloak/demo/` | The Docker Compose demo: realm import, the login and browser smoke tests, the tunnel overlay and the demo image's drawing script. |
 | `docs/keycloak.md` | Plugin design, configuration and demo. |
 | `scripts/` | Check scripts used by the Makefile, the hook and CI. |
 
@@ -127,7 +129,7 @@ Coordinates are in units of image width, never pixels: x runs 0 to 1, y runs 0 t
 
 Safe. The core does no I/O: no ports, no files, no environment variables, no shared state. Tests build everything in memory. Each worktree gets its own `target/` directory.
 
-The service takes its port and database path from the environment. `make image` tags the image after the checkout's directory, and `make container-smoke` names its container after its process id and binds a free host port. `make serve` binds a free port by default, and `make smoke` uses its own temporary database, so copies in several worktrees do not collide. Do not hard-code either. `make demo-smoke` names its compose project after its process id and binds a free port. `make demo` is the exception: it publishes Keycloak on port 8080 under one project name, so run one at a time.
+The service takes its port and database path from the environment. `make image` tags the image after the checkout's directory, and `make container-smoke` names its container after its process id and binds a free host port. `make serve` binds a free port by default, and `make smoke` uses its own temporary database, so copies in several worktrees do not collide. Do not hard-code either. `make demo-smoke` names its compose project after its process id and binds a free port. `make demo` and `make demo-tunnel` are the exception: they publish Keycloak on port 8080 under one project name, so run one at a time.
 
 ## Outside dependencies
 

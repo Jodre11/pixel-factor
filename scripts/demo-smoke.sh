@@ -5,7 +5,8 @@
 #
 # Checks: Keycloak loaded all three providers and imported the realm; the service answers every call the plugin
 # makes, from inside the compose network; the demo image's aspect matches PF_IMAGES; and a login through Keycloak's
-# own pages enrols taps, refuses a wrong sequence and accepts the right one.
+# own pages enrols taps, refuses a wrong sequence and accepts the right one, first by form posts and then in a real
+# browser (Chromium, desktop, emulated phone and keyboard).
 set -euo pipefail
 
 image="${1:?usage: scripts/demo-smoke.sh <service image>}"
@@ -13,6 +14,7 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 compose_file="$root/keycloak/demo/compose.yaml"
 project="pf-demo-smoke-$$"
 maven="maven@sha256:99e61abcff91a9b1333463bd8451fb18495d6eba9250ac66a338b518f8278320"
+browser_image="pf-browser-smoke:$$"
 
 export PF_SERVICE_IMAGE="$image" PF_DEMO_PROJECT="$project" PF_DEMO_PUBLISH="127.0.0.1:"
 
@@ -24,6 +26,7 @@ cleanup() {
     status=$?
     if [[ $status -ne 0 ]]; then compose logs --no-color --tail 80 >&2 || true; fi
     compose down -v --remove-orphans >/dev/null 2>&1 || true
+    docker image rm "$browser_image" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -77,3 +80,14 @@ docker run --rm --network "${project}_default" -v "$root/scripts:/scripts:ro" -e
     "$maven" bash /scripts/smoke.sh http://service:8080
 
 python3 "$root/keycloak/demo/login_smoke.py" "$base"
+
+# The same login in a real browser, so the tap page's script runs. The container shares Keycloak's network
+# namespace and browses http://localhost:8080: Chromium sends Keycloak's Secure cookies over plain HTTP only to a
+# loopback address. Screenshots of a failing page land in target/browser-smoke.
+shots="$root/target/browser-smoke"
+rm -rf "$shots"
+mkdir -p "$shots"
+docker build --quiet -t "$browser_image" "$root/keycloak/demo/browser" >/dev/null
+docker run --rm --network "container:$(compose ps -q keycloak)" \
+    -v "$root/keycloak/demo:/demo:ro" -v "$shots:/shots" \
+    "$browser_image" http://localhost:8080 /shots
